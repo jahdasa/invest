@@ -1008,7 +1008,7 @@ components:
       type: string
       enum:
         - PENDING
-        - READY
+        - BOOKED
         - PARTIALLY_EXECUTED
         - EXECUTED
         - FAILED
