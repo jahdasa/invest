@@ -195,13 +195,68 @@ paths:
                 message: Instruction with the specified instructionId does not exist.
 
 
+  /investments/{investmentId}:
+    get:
+      operationId: getInvestment
+      summary: Get investment account details
+      description: >
+        Returns the investment account's default plan, cash balance,
+        and current asset holdings.
+
+      parameters:
+
+        - name: investmentId
+          in: path
+          required: true
+          description: Unique identifier of the investment account
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+      responses:
+
+        '200':
+          description: Investment account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestmentDetailsResponse'
+
+              example:
+                investmentId: 200001
+                investmentPlanId: 300002
+                cashBalance: 5000000
+                assets:
+                  - isin: IRTKMOFD0001
+                    symbol: عیار
+                    quantity: 1500
+                    lastMarketPrice: 133000
+
+                  - isin: IRT3TVAF0001
+                    symbol: توان
+                    quantity: 800
+                    lastMarketPrice: 25000
+
+        '404':
+          description: Investment account not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+              example:
+                code: INVESTMENT_NOT_FOUND
+                message: The specified investment account does not exist.
+
+
 components:
 
   schemas:
 
     InstructionRequest:
       type: object
-      additionalProperties: false
+      unevaluatedProperties: false
 
       required:
         - instructionId
@@ -399,6 +454,83 @@ components:
             $ref: '#/components/schemas/InstructionOrder'
 
 
+    InvestmentDetailsResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - investmentId
+        - investmentPlanId
+        - cashBalance
+        - assets
+
+      properties:
+
+        investmentId:
+          type: integer
+          format: int64
+
+        investmentPlanId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          description: >
+            Default investment plan of the investment account.
+            May be null if no plan has been assigned.
+
+        cashBalance:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Cash balance available in the investment account.
+
+        assets:
+          type: array
+          description: >
+            Current asset holdings of the investment account.
+          items:
+            $ref: '#/components/schemas/InvestmentAsset'
+
+
+    InvestmentAsset:
+      type: object
+      additionalProperties: false
+
+      required:
+        - isin
+        - symbol
+        - quantity
+        - lastMarketPrice
+
+      properties:
+
+        isin:
+          type: string
+          description: ISIN code of the trading symbol.
+          example: IRTKMOFD0001
+
+        symbol:
+          type: string
+          description: Trading symbol (short code).
+          example: عیار
+
+        quantity:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Number of units of the symbol currently held.
+
+        lastMarketPrice:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Last known market price per unit of the symbol.
+
+
     InstructionOrder:
       type: object
       additionalProperties: false
@@ -406,6 +538,7 @@ components:
       required:
         - isin
         - symbol
+        - symbolName
         - amount
         - executedAmount
         - executedQuantity
@@ -420,8 +553,13 @@ components:
 
         symbol:
           type: string
-          description: Trading symbol name.
-          example: صندوق طلا
+          description: Trading symbol (short code).
+          example: عیار
+
+        symbolName:
+          type: string
+          description: Full name of the trading symbol.
+          example: صندوق عیار مفید
 
         amount:
           type: integer
