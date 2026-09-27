@@ -227,6 +227,7 @@ paths:
                 investmentId: 200001
                 investmentPlanId: 300002
                 cashBalance: 5000000
+                investmentValue: 224500000
                 assets:
                   - isin: IRTKMOFD0001
                     symbol: عیار
@@ -462,6 +463,7 @@ components:
         - investmentId
         - investmentPlanId
         - cashBalance
+        - investmentValue
         - assets
 
       properties:
@@ -485,6 +487,14 @@ components:
           minimum: 0
           description: >
             Cash balance available in the investment account.
+
+        investmentValue:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Total value of the investment account, equal to the cash
+            balance plus the market value of all asset holdings.
 
         assets:
           type: array
