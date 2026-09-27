@@ -995,8 +995,8 @@ components:
     InstructionStatus:
       type: string
       enum:
-        - PROCESSING
         - PENDING
+        - EXECUTING
         - PARTIALLY_EXECUTED
         - EXECUTED
         - FAILED
