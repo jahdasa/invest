@@ -171,6 +171,7 @@ paths:
                     isin: IRTKMOFD0001
                     symbol: عیار
                     symbolName: صندوق عیار مفید
+                    side: BUY
                     amount: 30000000
                     executedAmount: 20000000
                     executedQuantity: 1500
@@ -180,6 +181,7 @@ paths:
                     isin: IRT3TVAF0001
                     symbol: توان
                     symbolName: صندوق اهرمی توان
+                    side: BUY
                     amount: 20000000
                     executedAmount: 0
                     executedQuantity: 0
@@ -289,16 +291,19 @@ paths:
                 isin: IRTKMOFD0001
                 symbol: عیار
                 symbolName: صندوق عیار مفید
+                side: BUY
                 amount: 30000000
                 executedAmount: 20000000
                 executedQuantity: 1500
                 status: PARTIALLY_EXECUTED
                 trades:
-                  - quantity: 1000
+                  - side: BUY
+                    quantity: 1000
                     price: 133000
                     timestamp: '2026-09-27T09:30:00Z'
 
-                  - quantity: 500
+                  - side: BUY
+                    quantity: 500
                     price: 134000
                     timestamp: '2026-09-27T10:05:00Z'
 
@@ -368,6 +373,7 @@ paths:
                     isin: IRTKMOFD0001
                     symbol: عیار
                     symbolName: صندوق عیار مفید
+                    side: BUY
                     quantity: 1000
                     price: 133000
                     timestamp: '2026-09-27T09:30:00Z'
@@ -377,6 +383,7 @@ paths:
                     isin: IRTKMOFD0001
                     symbol: عیار
                     symbolName: صندوق عیار مفید
+                    side: BUY
                     quantity: 500
                     price: 134000
                     timestamp: '2026-09-27T10:05:00Z'
@@ -699,6 +706,7 @@ components:
         - isin
         - symbol
         - symbolName
+        - side
         - amount
         - executedAmount
         - executedQuantity
@@ -726,6 +734,9 @@ components:
           type: string
           description: Full name of the trading symbol.
           example: صندوق عیار مفید
+
+        side:
+          $ref: '#/components/schemas/OrderSide'
 
         amount:
           type: integer
@@ -763,6 +774,7 @@ components:
         - isin
         - symbol
         - symbolName
+        - side
         - amount
         - executedAmount
         - executedQuantity
@@ -802,6 +814,9 @@ components:
           description: Full name of the trading symbol.
           example: صندوق عیار مفید
 
+        side:
+          $ref: '#/components/schemas/OrderSide'
+
         amount:
           type: integer
           format: int64
@@ -839,11 +854,15 @@ components:
       additionalProperties: false
 
       required:
+        - side
         - quantity
         - price
         - timestamp
 
       properties:
+
+        side:
+          $ref: '#/components/schemas/OrderSide'
 
         quantity:
           type: integer
@@ -908,6 +927,7 @@ components:
         - isin
         - symbol
         - symbolName
+        - side
         - quantity
         - price
         - timestamp
@@ -939,6 +959,9 @@ components:
           type: string
           description: Full name of the trading symbol.
           example: صندوق عیار مفید
+
+        side:
+          $ref: '#/components/schemas/OrderSide'
 
         quantity:
           type: integer
@@ -996,6 +1019,13 @@ components:
         - EXECUTED
         - FAILED
         - CANCELLED
+
+
+    OrderSide:
+      type: string
+      enum:
+        - BUY
+        - SELL
 
 
     ErrorResponse:
