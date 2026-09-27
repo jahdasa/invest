@@ -297,13 +297,11 @@ paths:
                 executedQuantity: 1500
                 status: PARTIALLY_EXECUTED
                 trades:
-                  - side: BUY
-                    quantity: 1000
+                  - quantity: 1000
                     price: 133000
                     timestamp: '2026-09-27T09:30:00Z'
 
-                  - side: BUY
-                    quantity: 500
+                  - quantity: 500
                     price: 134000
                     timestamp: '2026-09-27T10:05:00Z'
 
@@ -854,15 +852,11 @@ components:
       additionalProperties: false
 
       required:
-        - side
         - quantity
         - price
         - timestamp
 
       properties:
-
-        side:
-          $ref: '#/components/schemas/OrderSide'
 
         quantity:
           type: integer
