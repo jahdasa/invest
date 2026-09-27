@@ -1331,9 +1331,8 @@ components:
         Once orders exist, the status is derived from them. See
         *Instruction status lifecycle* in the API description.
       enum:
-        - RECEIVED
-        - PROCESSING
         - PENDING
+        - EXECUTING
         - PARTIALLY_EXECUTED
         - EXECUTED
         - FAILED
@@ -1358,7 +1357,7 @@ components:
         See *Order status lifecycle* in the API description.
       enum:
         - PENDING
-        - READY
+        - BOOKED
         - PARTIALLY_EXECUTED
         - EXECUTED
         - FAILED
