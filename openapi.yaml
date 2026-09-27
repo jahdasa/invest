@@ -167,7 +167,8 @@ paths:
                 investmentPlanId: 300002
                 status: PARTIALLY_EXECUTED
                 orders:
-                  - isin: IRTKMOFD0001
+                  - orderId: 400001
+                    isin: IRTKMOFD0001
                     symbol: عیار
                     symbolName: صندوق عیار مفید
                     amount: 30000000
@@ -175,7 +176,8 @@ paths:
                     executedQuantity: 1500
                     status: PARTIALLY_EXECUTED
 
-                  - isin: IRT3TVAF0001
+                  - orderId: 400002
+                    isin: IRT3TVAF0001
                     symbol: توان
                     symbolName: صندوق اهرمی توان
                     amount: 20000000
@@ -554,6 +556,7 @@ components:
       additionalProperties: false
 
       required:
+        - orderId
         - isin
         - symbol
         - symbolName
@@ -563,6 +566,12 @@ components:
         - status
 
       properties:
+
+        orderId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Unique identifier of the order.
 
         isin:
           type: string
