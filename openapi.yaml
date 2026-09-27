@@ -238,6 +238,7 @@ paths:
                     symbol: توان
                     quantity: 800
                     lastMarketPrice: 25000
+                timestamp: '2026-09-27T10:15:00Z'
 
         '404':
           description: Investment account not found
@@ -465,6 +466,7 @@ components:
         - cashBalance
         - investmentValue
         - assets
+        - timestamp
 
       properties:
 
@@ -502,6 +504,12 @@ components:
             Current asset holdings of the investment account.
           items:
             $ref: '#/components/schemas/InvestmentAsset'
+
+        timestamp:
+          type: string
+          format: date-time
+          description: >
+            Date and time this valuation was generated.
 
 
     InvestmentAsset:
