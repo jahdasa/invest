@@ -1,0 +1,521 @@
+openapi: 3.1.0
+
+info:
+  title: Investment Instruction API
+  version: 1.0.0
+  description: >
+    API for submitting investment instructions and retrieving
+    their execution status and generated monetary orders.
+
+servers:
+  - url: /api/v1
+
+paths:
+
+  /instructions:
+    post:
+      operationId: submitInstruction
+      summary: Submit investment instruction
+      description: >
+        Submits a BUY, SELL or REBALANCE instruction.
+
+        Plan precedence for execution is:
+
+        1. instructionPlanId
+        2. investmentPlanId
+        3. Existing default plan of the investment account
+
+        When investmentPlanId is provided, it is stored as the
+        default plan of the investment account.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstructionRequest'
+
+            examples:
+
+              buy:
+                summary: Buy instruction
+                value:
+                  instructionId: 100001
+                  investmentId: 200001
+                  instructionType: BUY
+                  amount: 50000000
+                  instructionPolicy: NEW_CASH_ONLY
+                  instructionPlanId: 300001
+                  investmentPlanId: 300002
+
+              sell:
+                summary: Sell instruction
+                value:
+                  instructionId: 100002
+                  investmentId: 200001
+                  instructionType: SELL
+                  amount: 25000000
+                  instructionPolicy: PROPORTIONAL
+
+              rebalance:
+                summary: Rebalance instruction
+                value:
+                  instructionId: 100003
+                  investmentId: 200001
+                  instructionType: REBALANCE
+                  instructionPolicy: ALL
+                  instructionPlanId: 300001
+
+      responses:
+
+        '201':
+          description: Instruction created successfully
+
+        '400':
+          description: Invalid instruction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+              examples:
+
+                duplicateInstruction:
+                  summary: Duplicate instruction
+                  value:
+                    code: DUPLICATE_INSTRUCTION
+                    message: Instruction with the specified instructionId already exists.
+
+                instructionPlanNotFound:
+                  summary: Instruction plan not found
+                  value:
+                    code: INSTRUCTION_PLAN_NOT_FOUND
+                    message: The specified instructionPlanId does not exist.
+
+                investmentPlanNotFound:
+                  summary: Investment plan not found
+                  value:
+                    code: INVESTMENT_PLAN_NOT_FOUND
+                    message: The specified investmentPlanId does not exist.
+
+                investmentPlanRequired:
+                  summary: Investment plan required
+                  value:
+                    code: INVESTMENT_PLAN_REQUIRED
+                    message: investmentPlanId is required when creating a new investment account.
+
+                investmentNotFound:
+                  summary: Investment account not found
+                  value:
+                    code: INVESTMENT_NOT_FOUND
+                    message: The specified investment account does not exist.
+
+                invalidInstructionPolicy:
+                  summary: Invalid instruction policy
+                  value:
+                    code: INVALID_INSTRUCTION_POLICY
+                    message: instructionPolicy is not valid for the specified instructionType.
+
+                amountRequired:
+                  summary: Amount required
+                  value:
+                    code: AMOUNT_REQUIRED
+                    message: amount is required for BUY and SELL instructions.
+
+                invalidAmount:
+                  summary: Invalid amount
+                  value:
+                    code: INVALID_AMOUNT
+                    message: amount must be greater than zero.
+
+
+  /instructions/{instructionId}:
+    get:
+      operationId: getInstruction
+      summary: Get instruction details and execution status
+      description: >
+        Returns instruction details, current execution status,
+        and monetary orders generated from the instruction.
+
+      parameters:
+
+        - name: instructionId
+          in: path
+          required: true
+          description: Unique identifier of the instruction
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+      responses:
+
+        '200':
+          description: Instruction details and execution status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstructionDetailsResponse'
+
+              example:
+                instructionId: 100001
+                investmentId: 200001
+                instructionType: BUY
+                amount: 50000000
+                instructionPolicy: NEW_CASH_ONLY
+                instructionPlanId: 300001
+                investmentPlanId: 300002
+                status: PARTIALLY_EXECUTED
+                orders:
+                  - isin: IRTKMOFD0001
+                    symbol: عیار
+                    symbolName: صندوق عیار مفید
+                    amount: 30000000
+                    executedAmount: 20000000
+                    executedQuantity: 1500
+                    status: PARTIALLY_EXECUTED
+
+                  - isin: IRT3TVAF0001
+                    symbol: توان
+                    symbolName: صندوق اهرمی توان
+                    amount: 20000000
+                    executedAmount: 0
+                    executedQuantity: 0
+                    status: PENDING
+
+        '404':
+          description: Instruction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+              example:
+                code: INSTRUCTION_NOT_FOUND
+                message: Instruction with the specified instructionId does not exist.
+
+
+components:
+
+  schemas:
+
+    InstructionRequest:
+      type: object
+      additionalProperties: false
+
+      required:
+        - instructionId
+        - investmentId
+        - instructionType
+        - instructionPolicy
+
+      properties:
+
+        instructionId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >
+            Unique identifier of the instruction.
+            Reusing an existing instructionId is not allowed.
+
+        investmentId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >
+            Identifier of the investment account.
+
+            For SELL instructions, the investment account must
+            already exist.
+
+            For BUY instructions, a new investment account may be
+            created if investmentPlanId is provided.
+
+        instructionType:
+          $ref: '#/components/schemas/InstructionType'
+
+        amount:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          minimum: 1
+          description: >
+            Monetary amount of the instruction.
+
+            Required for BUY and SELL instructions.
+
+            Optional for REBALANCE instructions.
+
+        instructionPolicy:
+          $ref: '#/components/schemas/InstructionPolicy'
+
+        instructionPlanId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          minimum: 1
+          description: >
+            Execution plan used specifically for this instruction.
+
+            When provided, this plan has the highest priority
+            for executing the current instruction.
+
+            For BUY instructions, instructionPlanId takes precedence
+            over investmentPlanId and the existing default plan
+            of the investment account.
+
+        investmentPlanId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          minimum: 1
+          description: >
+            Default investment plan of the investment account.
+
+            When provided, this plan is stored as the default plan
+            of the investment account.
+
+            If instructionPlanId is not provided, investmentPlanId
+            is used for execution.
+
+            When creating a new investment account,
+            investmentPlanId is required.
+
+            For an existing investment account, if neither
+            instructionPlanId nor investmentPlanId is provided,
+            the existing default plan of the investment account
+            is used.
+
+      allOf:
+
+        - if:
+            properties:
+              instructionType:
+                const: BUY
+            required:
+              - instructionType
+
+          then:
+            required:
+              - amount
+
+            properties:
+              instructionPolicy:
+                const: NEW_CASH_ONLY
+
+
+        - if:
+            properties:
+              instructionType:
+                const: SELL
+            required:
+              - instructionType
+
+          then:
+            required:
+              - amount
+
+            properties:
+              instructionPolicy:
+                enum:
+                  - ALL_ASSET
+                  - PROPORTIONAL
+
+
+        - if:
+            properties:
+              instructionType:
+                const: REBALANCE
+            required:
+              - instructionType
+
+          then:
+            properties:
+              instructionPolicy:
+                const: ALL
+
+
+    InstructionDetailsResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - instructionId
+        - investmentId
+        - instructionType
+        - instructionPolicy
+        - status
+        - orders
+
+      properties:
+
+        instructionId:
+          type: integer
+          format: int64
+
+        investmentId:
+          type: integer
+          format: int64
+
+        instructionType:
+          $ref: '#/components/schemas/InstructionType'
+
+        amount:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          description: >
+            Total monetary amount of the instruction.
+            May be null for REBALANCE instructions.
+
+        instructionPolicy:
+          $ref: '#/components/schemas/InstructionPolicy'
+
+        instructionPlanId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+
+        investmentPlanId:
+          type:
+            - integer
+            - 'null'
+          format: int64
+
+        status:
+          $ref: '#/components/schemas/InstructionStatus'
+
+        orders:
+          type: array
+          description: >
+            Monetary orders generated from the instruction.
+          items:
+            $ref: '#/components/schemas/InstructionOrder'
+
+
+    InstructionOrder:
+      type: object
+      additionalProperties: false
+
+      required:
+        - isin
+        - symbol
+        - amount
+        - executedAmount
+        - executedQuantity
+        - status
+
+      properties:
+
+        isin:
+          type: string
+          description: ISIN code of the trading symbol.
+          example: IRTKMOFD0001
+
+        symbol:
+          type: string
+          description: Trading symbol name.
+          example: صندوق طلا
+
+        amount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Total monetary amount assigned to this order.
+
+        executedAmount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Monetary amount of the order that has been executed so far.
+
+        executedQuantity:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Number of units of the symbol that have been executed so far.
+
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+
+
+    InstructionType:
+      type: string
+      enum:
+        - BUY
+        - SELL
+        - REBALANCE
+
+
+    InstructionPolicy:
+      type: string
+      enum:
+        - NEW_CASH_ONLY
+        - ALL_ASSET
+        - PROPORTIONAL
+        - ALL
+
+
+    InstructionStatus:
+      type: string
+      enum:
+        - RECEIVED
+        - PROCESSING
+        - PENDING
+        - PARTIALLY_EXECUTED
+        - EXECUTED
+        - FAILED
+        - CANCELLED
+
+
+    OrderStatus:
+      type: string
+      enum:
+        - PENDING
+        - READY
+        - PARTIALLY_EXECUTED
+        - EXECUTED
+        - FAILED
+        - CANCELLED
+
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - code
+        - message
+
+      properties:
+
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+
+        message:
+          type: string
+          description: Human-readable description of the error.
+
+
+    ErrorCode:
+      type: string
+      enum:
+        - DUPLICATE_INSTRUCTION
+        - INSTRUCTION_PLAN_NOT_FOUND
+        - INVESTMENT_PLAN_NOT_FOUND
+        - INVESTMENT_NOT_FOUND
+        - INVESTMENT_PLAN_REQUIRED
+        - INVALID_INSTRUCTION_POLICY
+        - AMOUNT_REQUIRED
+        - INVALID_AMOUNT
+        - INVALID_REQUEST
+        - INSTRUCTION_NOT_FOUND
