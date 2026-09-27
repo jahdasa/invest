@@ -254,6 +254,66 @@ paths:
                 message: The specified investment account does not exist.
 
 
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      summary: Get order details and trades
+      description: >
+        Returns order details, the instruction and investment account
+        it belongs to, and the trades executed for this order.
+
+      parameters:
+
+        - name: orderId
+          in: path
+          required: true
+          description: Unique identifier of the order
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+      responses:
+
+        '200':
+          description: Order details and trades
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetailsResponse'
+
+              example:
+                orderId: 400001
+                instructionId: 100001
+                investmentId: 200001
+                isin: IRTKMOFD0001
+                symbol: عیار
+                symbolName: صندوق عیار مفید
+                amount: 30000000
+                executedAmount: 20000000
+                executedQuantity: 1500
+                status: PARTIALLY_EXECUTED
+                trades:
+                  - quantity: 1000
+                    price: 133000
+                    timestamp: '2026-09-27T09:30:00Z'
+
+                  - quantity: 500
+                    price: 134000
+                    timestamp: '2026-09-27T10:05:00Z'
+
+        '404':
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+              example:
+                code: ORDER_NOT_FOUND
+                message: Order with the specified orderId does not exist.
+
+
 components:
 
   schemas:
@@ -613,6 +673,117 @@ components:
           $ref: '#/components/schemas/OrderStatus'
 
 
+    OrderDetailsResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - orderId
+        - instructionId
+        - investmentId
+        - isin
+        - symbol
+        - symbolName
+        - amount
+        - executedAmount
+        - executedQuantity
+        - status
+        - trades
+
+      properties:
+
+        orderId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Unique identifier of the order.
+
+        instructionId:
+          type: integer
+          format: int64
+          description: Identifier of the instruction this order was generated from.
+
+        investmentId:
+          type: integer
+          format: int64
+          description: Identifier of the investment account this order belongs to.
+
+        isin:
+          type: string
+          description: ISIN code of the trading symbol.
+          example: IRTKMOFD0001
+
+        symbol:
+          type: string
+          description: Trading symbol (short code).
+          example: عیار
+
+        symbolName:
+          type: string
+          description: Full name of the trading symbol.
+          example: صندوق عیار مفید
+
+        amount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Total monetary amount assigned to this order.
+
+        executedAmount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Monetary amount of the order that has been executed so far.
+
+        executedQuantity:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Number of units of the symbol that have been executed so far.
+
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+
+        trades:
+          type: array
+          description: >
+            Trades executed for this order.
+          items:
+            $ref: '#/components/schemas/Trade'
+
+
+    Trade:
+      type: object
+      additionalProperties: false
+
+      required:
+        - quantity
+        - price
+        - timestamp
+
+      properties:
+
+        quantity:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of units traded.
+
+        price:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Price per unit for this trade.
+
+        timestamp:
+          type: string
+          format: date-time
+          description: Date and time the trade was executed.
+
+
     InstructionType:
       type: string
       enum:
@@ -684,3 +855,4 @@ components:
         - INVALID_AMOUNT
         - INVALID_REQUEST
         - INSTRUCTION_NOT_FOUND
+        - ORDER_NOT_FOUND
