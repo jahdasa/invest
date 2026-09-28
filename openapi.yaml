@@ -1,4 +1,4 @@
-openapi: 3.1.0
+openapi: 3.0.3
 
 info:
   title: Investment Instruction API
@@ -595,7 +595,7 @@ components:
 
     InstructionRequest:
       type: object
-      unevaluatedProperties: false
+      additionalProperties: false
 
       required:
         - instructionId
@@ -638,9 +638,8 @@ components:
           $ref: '#/components/schemas/InstructionType'
 
         amount:
-          type:
-            - integer
-            - 'null'
+          type: integer
+          nullable: true
           format: int64
           minimum: 1
           description: >
@@ -657,9 +656,8 @@ components:
           $ref: '#/components/schemas/InstructionPolicy'
 
         instructionPlanId:
-          type:
-            - integer
-            - 'null'
+          type: integer
+          nullable: true
           format: int64
           minimum: 1
           description: >
@@ -674,9 +672,8 @@ components:
             effect on execution.
 
         investmentPlanId:
-          type:
-            - integer
-            - 'null'
+          type: integer
+          nullable: true
           format: int64
           minimum: 1
           description: >
@@ -697,40 +694,28 @@ components:
             is used. If the account has no default plan, BUY
             is rejected with INVESTMENT_PLAN_REQUIRED.
 
-      allOf:
+      oneOf:
 
-        - if:
-            properties:
-              instructionType:
-                const: BUY
-            required:
-              - instructionType
+        - properties:
+            instructionType:
+              enum:
+                - BUY
+            instructionPolicy:
+              enum:
+                - NEW_CASH_ONLY
+          required:
+            - amount
 
-          then:
-            required:
-              - amount
-
-            properties:
-              instructionPolicy:
-                const: NEW_CASH_ONLY
-
-
-        - if:
-            properties:
-              instructionType:
-                const: SELL
-            required:
-              - instructionType
-
-          then:
-            required:
-              - amount
-
-            properties:
-              instructionPolicy:
-                enum:
-                  - ALL_ASSET
-                  - PROPORTIONAL
+        - properties:
+            instructionType:
+              enum:
+                - SELL
+            instructionPolicy:
+              enum:
+                - ALL_ASSET
+                - PROPORTIONAL
+          required:
+            - amount
 
 
     InstructionDetailsResponse:
@@ -759,9 +744,8 @@ components:
           $ref: '#/components/schemas/InstructionType'
 
         amount:
-          type:
-            - integer
-            - 'null'
+          type: integer
+          nullable: true
           format: int64
           description: >
             Total monetary amount of the instruction, in Rial, as submitted.
@@ -770,16 +754,14 @@ components:
           $ref: '#/components/schemas/InstructionPolicy'
 
         instructionPlanId:
-          type:
-            - integer
-            - 'null'
+          type: integer
+          nullable: true
           format: int64
           description: instructionPlanId as submitted; null when not provided.
 
         investmentPlanId:
-          type:
-            - integer
-            - 'null'
+          type: integer
+          nullable: true
           format: int64
           description: investmentPlanId as submitted; null when not provided.
 
@@ -815,9 +797,8 @@ components:
           format: int64
 
         investmentPlanId:
-          type:
-            - integer
-            - 'null'
+          type: integer
+          nullable: true
           format: int64
           description: >
             Default investment plan of the investment account.
@@ -1156,25 +1137,24 @@ components:
         trade:
           $ref: '#/components/schemas/TransactionTrade'
 
-      allOf:
+      oneOf:
 
-        - if:
-            properties:
-              type:
-                enum:
-                  - BUY
-                  - SELL
-            required:
-              - type
+        - properties:
+            type:
+              enum:
+                - BUY
+                - SELL
+          required:
+            - trade
 
-          then:
+        - properties:
+            type:
+              enum:
+                - DEPOSIT
+                - WITHDRAW
+          not:
             required:
               - trade
-
-          else:
-            not:
-              required:
-                - trade
 
 
     TransactionTrade:
