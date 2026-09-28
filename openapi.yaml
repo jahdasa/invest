@@ -51,7 +51,7 @@ info:
     | `PENDING` | `EXECUTING` | Orders are generated. |
     | `EXECUTING` | `PARTIALLY_EXECUTED` | The first trade on any order. |
     | `EXECUTING`, `PARTIALLY_EXECUTED` | `EXECUTED`, `FAILED`, `CANCELLED` | The last non-terminal order becomes terminal. The status is derived from the order statuses as described below. |
-    | `PENDING` | `FAILED` | A business rule fails at processing time. Examples: SELL `amount` is greater than the value available to sell; REBALANCE `amount` is greater than `cashBalance`. |
+    | `PENDING` | `FAILED` | A business rule fails at processing time. Examples: SELL `amount` is greater than the value available to sell. |
     | `PENDING` | `CANCELLED` | The instruction is cancelled before orders are generated. |
 
     Once orders exist, the instruction status is **always derived** from
@@ -70,7 +70,7 @@ info:
 
     | Status | Meaning | Terminal |
     |---|---|---|
-    | `PENDING` | Generated, but not yet sent to the market. It is waiting for the trading session to open or, in a REBALANCE, for the SELL orders to release cash for the BUY orders. | No |
+    | `PENDING` | Generated, but not yet sent to the market. It is waiting for the trading session to open. | No |
     | `BOOKED` | Placed in the market's order book and waiting for fills. Nothing has executed yet. | No |
     | `PARTIALLY_EXECUTED` | Part of the order has executed, and the rest is still in the order book. | No |
     | `EXECUTED` | Fully executed. Only whole units are traded, so `executedAmount` may be slightly below `amount`. Any leftover stays in `cashBalance`. | Yes |
@@ -89,7 +89,6 @@ info:
     | `BUY` | `NEW_CASH_ONLY` | `amount` is new cash invested by this instruction. It is split across the resolved plan's assets by their target weights. Existing `cashBalance` and holdings are not used and not sold. |
     | `SELL` | `PROPORTIONAL` | Raises `amount` by selling each held asset in proportion to its share of the market value of the holdings. `cashBalance` is not used, and the relative weights of the holdings are kept. |
     | `SELL` | `ALL_ASSET` | Raises `amount` from all of the account's assets, **cash included**. Available `cashBalance` is used first. Only the remainder, if any, is raised by selling holdings proportionally, as in `PROPORTIONAL`. It does **not** mean "liquidate everything". To withdraw the whole account, send `amount` equal to the current `investmentValue`. |
-    | `REBALANCE` | `ALL` | Sells overweight assets and buys underweight assets across all holdings, so the account matches the target weights of the resolved plan. |
 
     Any other combination is rejected with `INVALID_INSTRUCTION_POLICY`.
 
@@ -164,11 +163,11 @@ paths:
       operationId: submitInstruction
       summary: Submit investment instruction
       description: |
-        Submits a BUY, SELL or REBALANCE instruction for asynchronous
+        Submits a BUY or SELL instruction for asynchronous
         execution. See *Instruction policies* for the meaning of each
         policy.
 
-        Plan resolution applies to BUY and REBALANCE instructions. The
+        Plan resolution applies to BUY instructions. The
         plan used for execution is chosen in this order:
 
         1. instructionPlanId
@@ -187,7 +186,7 @@ paths:
         - BUY: when the investment account does not exist, it is created
           with the given investmentId. In that case investmentPlanId is
           required (`INVESTMENT_PLAN_REQUIRED`).
-        - SELL and REBALANCE: the investment account must already exist
+        - SELL: the investment account must already exist
           (`INVESTMENT_NOT_FOUND`).
 
         On success the response is **201 with an empty body**. The
@@ -227,15 +226,6 @@ paths:
                   instructionType: SELL
                   amount: 25000000
                   instructionPolicy: PROPORTIONAL
-
-              rebalance:
-                summary: Rebalance instruction
-                value:
-                  instructionId: 100003
-                  investmentId: 200001
-                  instructionType: REBALANCE
-                  instructionPolicy: ALL
-                  instructionPlanId: 300001
 
       responses:
 
@@ -634,7 +624,7 @@ components:
           description: >
             Identifier of the investment account.
 
-            For SELL and REBALANCE instructions, the investment account
+            For SELL instructions, the investment account
             must already exist.
 
             For BUY instructions, a new investment account is created with
@@ -660,12 +650,6 @@ components:
             the value available to sell, otherwise the instruction becomes
             FAILED.
 
-            REBALANCE (optional): cash from the existing cashBalance to
-            invest in addition to rebalancing the holdings. It must not
-            exceed cashBalance, otherwise the instruction becomes FAILED.
-            When omitted or null, only the existing holdings are
-            rebalanced and cashBalance is not used.
-
         instructionPolicy:
           $ref: '#/components/schemas/InstructionPolicy'
 
@@ -679,7 +663,7 @@ components:
             Execution plan used only for this instruction. It is not stored
             as the account's default.
 
-            For BUY and REBALANCE instructions, instructionPlanId takes
+            For BUY instructions, instructionPlanId takes
             precedence over investmentPlanId and over the existing default
             plan of the investment account.
 
@@ -698,7 +682,7 @@ components:
             When provided, this plan is stored as the default plan of the
             investment account, for every instruction type.
 
-            For BUY and REBALANCE, if instructionPlanId is not provided,
+            For BUY, if instructionPlanId is not provided,
             investmentPlanId is used for execution.
 
             When creating a new investment account,
@@ -707,8 +691,8 @@ components:
             For an existing investment account, if neither
             instructionPlanId nor investmentPlanId is provided,
             the existing default plan of the investment account
-            is used. If the account has no default plan, BUY and REBALANCE
-            are rejected with INVESTMENT_PLAN_REQUIRED.
+            is used. If the account has no default plan, BUY
+            is rejected with INVESTMENT_PLAN_REQUIRED.
 
       allOf:
 
@@ -746,19 +730,6 @@ components:
                   - PROPORTIONAL
 
 
-        - if:
-            properties:
-              instructionType:
-                const: REBALANCE
-            required:
-              - instructionType
-
-          then:
-            properties:
-              instructionPolicy:
-                const: ALL
-
-
     InstructionDetailsResponse:
       type: object
       additionalProperties: false
@@ -791,7 +762,6 @@ components:
           format: int64
           description: >
             Total monetary amount of the instruction, in Rial, as submitted.
-            May be null for REBALANCE instructions.
 
         instructionPolicy:
           $ref: '#/components/schemas/InstructionPolicy'
@@ -851,7 +821,7 @@ components:
 
             May be null if no plan has been assigned. Accounts created
             through this API always have a default plan, because
-            investmentPlanId is required at creation. BUY and REBALANCE
+            investmentPlanId is required at creation. BUY
             instructions for an account without a default plan must provide
             a plan.
 
@@ -1212,11 +1182,9 @@ components:
       description: |
         - `BUY`: invest new cash according to a plan.
         - `SELL`: raise cash from the account for withdrawal.
-        - `REBALANCE`: realign the holdings with a plan's target weights.
       enum:
         - BUY
         - SELL
-        - REBALANCE
 
 
     InstructionPolicy:
@@ -1232,13 +1200,10 @@ components:
         - `ALL_ASSET` (SELL): raise `amount` from all assets, cash included.
           Available cash is used first, and the remainder is sold
           proportionally. It does not mean "liquidate everything".
-        - `ALL` (REBALANCE only): rebalance all holdings, plus the optional
-          `amount` taken from cash, to the plan's target weights.
       enum:
         - NEW_CASH_ONLY
         - ALL_ASSET
         - PROPORTIONAL
-        - ALL
 
 
     InstructionStatus:
