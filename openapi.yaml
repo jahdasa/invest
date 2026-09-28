@@ -149,7 +149,7 @@ info:
       Trade timestamps are the only execution times available.
     - No failure reason is exposed for `FAILED` instructions or orders.
     - Trades have no trade identifier.
-    - The investment trades endpoint is not paginated.
+    - The investment transactions endpoint is not paginated.
     - There is no endpoint that lists the instructions of an investment
       account. Clients must keep the `instructionId`s they submit.
 
@@ -498,14 +498,14 @@ paths:
                 message: Order with the specified orderId does not exist.
 
 
-  /investments/{investmentId}/trades:
+  /investments/{investmentId}/transactions:
     get:
-      operationId: getInvestmentTrades
-      summary: Get trades for an investment account within a date range
+      operationId: getInvestmentTransactions
+      summary: Get transactions for an investment account within a date range
       description: >
-        Returns all trades executed for the investment account
-        between the from and to timestamps (UTC), sorted by timestamp
-        ascending. The response is not paginated.
+        Returns all transactions (deposits, withdrawals, buys and sells) of
+        the investment account between the from and to timestamps (UTC),
+        sorted by timestamp ascending. The response is not paginated.
         A missing or malformed from or to, from later than to, or an
         invalid investmentId returns HTTP 400 with INVALID_REQUEST.
 
@@ -543,36 +543,39 @@ paths:
       responses:
 
         '200':
-          description: Trades executed within the specified date range
+          description: Transactions within the specified date range
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InvestmentTradeHistoryResponse'
+                $ref: '#/components/schemas/InvestmentTransactionHistoryResponse'
 
               example:
                 investmentId: 200001
                 from: '2026-09-01T00:00:00Z'
                 to: '2026-09-27T23:59:59Z'
-                trades:
-                  - orderId: 400001
-                    instructionId: 100001
-                    isin: IRTKMOFD0001
-                    symbol: عیار
-                    symbolName: صندوق عیار مفید
-                    side: BUY
-                    quantity: 1000
-                    price: 13300
-                    timestamp: '2026-09-27T09:30:00Z'
+                transactions:
+                  - transactionId: 500001
+                    type: DEPOSIT
+                    amount: 20000000
+                    timestamp: '2026-09-26T08:00:00Z'
 
-                  - orderId: 400001
-                    instructionId: 100001
-                    isin: IRTKMOFD0001
-                    symbol: عیار
-                    symbolName: صندوق عیار مفید
-                    side: BUY
-                    quantity: 500
-                    price: 13400
-                    timestamp: '2026-09-27T10:05:00Z'
+                  - transactionId: 500002
+                    type: BUY
+                    amount: 13300000
+                    timestamp: '2026-09-27T09:30:00Z'
+                    trade:
+                      orderId: 400001
+                      instructionId: 100001
+                      isin: IRTKMOFD0001
+                      symbol: عیار
+                      symbolName: صندوق عیار مفید
+                      quantity: 1000
+                      price: 13300
+
+                  - transactionId: 500003
+                    type: WITHDRAW
+                    amount: 5000000
+                    timestamp: '2026-09-27T12:00:00Z'
 
         '404':
           description: Investment account not found
@@ -1078,7 +1081,7 @@ components:
           description: Date and time the trade was executed, in UTC.
 
 
-    InvestmentTradeHistoryResponse:
+    InvestmentTransactionHistoryResponse:
       type: object
       additionalProperties: false
 
@@ -1086,7 +1089,7 @@ components:
         - investmentId
         - from
         - to
-        - trades
+        - transactions
 
       properties:
 
@@ -1104,18 +1107,80 @@ components:
           format: date-time
           description: End of the requested date range (inclusive), in UTC.
 
-        trades:
+        transactions:
           type: array
           description: >
-            Trades executed for the investment account within the
-            requested date range, sorted by timestamp ascending.
+            Transactions of the investment account within the requested
+            date range, sorted by timestamp ascending.
           items:
-            $ref: '#/components/schemas/InvestmentTrade'
+            $ref: '#/components/schemas/InvestmentTransaction'
 
 
-    InvestmentTrade:
+    InvestmentTransaction:
       type: object
       additionalProperties: false
+      description: >
+        A single transaction of an investment account. trade is present
+        only when type is BUY or SELL, and absent for DEPOSIT and WITHDRAW.
+
+      required:
+        - transactionId
+        - type
+        - amount
+        - timestamp
+
+      properties:
+
+        transactionId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Unique identifier of the transaction.
+
+        type:
+          $ref: '#/components/schemas/TransactionType'
+
+        amount:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >
+            Monetary value of the transaction, in Rial. For BUY and SELL it
+            equals trade.quantity × trade.price.
+
+        timestamp:
+          type: string
+          format: date-time
+          description: Date and time the transaction took place, in UTC.
+
+        trade:
+          $ref: '#/components/schemas/TransactionTrade'
+
+      allOf:
+
+        - if:
+            properties:
+              type:
+                enum:
+                  - BUY
+                  - SELL
+            required:
+              - type
+
+          then:
+            required:
+              - trade
+
+          else:
+            not:
+              required:
+                - trade
+
+
+    TransactionTrade:
+      type: object
+      additionalProperties: false
+      description: Trade details of a BUY or SELL transaction.
 
       required:
         - orderId
@@ -1123,10 +1188,8 @@ components:
         - isin
         - symbol
         - symbolName
-        - side
         - quantity
         - price
-        - timestamp
 
       properties:
 
@@ -1156,9 +1219,6 @@ components:
           description: Full name of the trading symbol.
           example: صندوق عیار مفید
 
-        side:
-          $ref: '#/components/schemas/OrderSide'
-
         quantity:
           type: integer
           format: int64
@@ -1171,10 +1231,19 @@ components:
           minimum: 1
           description: Price per unit for this trade, in Rial.
 
-        timestamp:
-          type: string
-          format: date-time
-          description: Date and time the trade was executed, in UTC.
+
+    TransactionType:
+      type: string
+      description: |
+        - `DEPOSIT`: cash added to the account.
+        - `WITHDRAW`: cash taken out of the account.
+        - `BUY`: units of an asset bought.
+        - `SELL`: units of an asset sold.
+      enum:
+        - DEPOSIT
+        - WITHDRAW
+        - BUY
+        - SELL
 
 
     InstructionType:
