@@ -316,7 +316,7 @@ paths:
 
         The response always has HTTP status 207, with one result per
         submitted instruction, in the same order as the request. Check
-        each result's `accepted` field rather than the HTTP status.
+        each result's `status` field rather than the HTTP status.
 
         HTTP 400 is only returned when the batch request itself is
         malformed (not a JSON array, or an empty one); it does not
@@ -352,7 +352,7 @@ paths:
         '207':
           description: >
             Batch processed. Each instruction was validated and stored
-            independently; check accepted on each result. An accepted
+            independently; check status on each result. An ACCEPTED
             instruction starts in status PENDING and is tracked exactly
             like a single POST /instructions submission.
           content:
@@ -365,10 +365,10 @@ paths:
                 results:
 
                   - instructionId: 100001
-                    accepted: true
+                    status: ACCEPTED
 
                   - instructionId: 100002
-                    accepted: false
+                    status: REJECTED
                     error:
                       code: DUPLICATE_INSTRUCTION
                       message: Instruction with the specified instructionId already exists.
@@ -926,11 +926,11 @@ components:
       additionalProperties: false
       description: >
         Result of submitting one instruction from the batch. error is
-        present only when accepted is false.
+        present only when status is REJECTED.
 
       required:
         - instructionId
-        - accepted
+        - status
 
       properties:
 
@@ -939,12 +939,8 @@ components:
           format: int64
           description: instructionId of the corresponding instruction in the request.
 
-        accepted:
-          type: boolean
-          description: >
-            Whether this instruction was accepted with status PENDING,
-            exactly as in POST /instructions. Track an accepted
-            instruction with GET /instructions/{instructionId}.
+        status:
+          $ref: '#/components/schemas/InstructionBatchResultStatus'
 
         error:
           $ref: '#/components/schemas/ErrorResponse'
@@ -952,19 +948,31 @@ components:
       oneOf:
 
         - properties:
-            accepted:
+            status:
               enum:
-                - true
+                - ACCEPTED
           not:
             required:
               - error
 
         - properties:
-            accepted:
+            status:
               enum:
-                - false
+                - REJECTED
           required:
             - error
+
+
+    InstructionBatchResultStatus:
+      type: string
+      description: |
+        - `ACCEPTED`: the instruction was stored with status PENDING,
+          exactly as in POST /instructions. Track it with
+          GET /instructions/{instructionId}.
+        - `REJECTED`: the instruction was not stored. See error.
+      enum:
+        - ACCEPTED
+        - REJECTED
 
 
     InvestmentDetailsResponse:
