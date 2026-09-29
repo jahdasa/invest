@@ -330,6 +330,7 @@ paths:
               $ref: '#/components/schemas/InstructionBatchRequest'
 
             example:
+              instructionBatchId: 600001
               instructions:
 
                 - instructionId: 100001
@@ -360,6 +361,7 @@ paths:
                 $ref: '#/components/schemas/InstructionBatchResponse'
 
               example:
+                instructionBatchId: 600001
                 results:
 
                   - instructionId: 100001
@@ -867,9 +869,23 @@ components:
       additionalProperties: false
 
       required:
+        - instructionBatchId
         - instructions
 
       properties:
+
+        instructionBatchId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: >
+            Client-generated unique identifier of the batch request. It is
+            echoed back in the response, for correlating the request with
+            its result and for logging or support purposes. It does not
+            affect deduplication: each instruction's own instructionId is
+            still the idempotency key, so resubmitting the same batch
+            (whether under the same or a different instructionBatchId) is
+            safe.
 
         instructions:
           type: array
@@ -886,9 +902,15 @@ components:
       additionalProperties: false
 
       required:
+        - instructionBatchId
         - results
 
       properties:
+
+        instructionBatchId:
+          type: integer
+          format: int64
+          description: instructionBatchId as submitted.
 
         results:
           type: array
