@@ -43,6 +43,7 @@ info:
     | `EXECUTED` | All orders are `EXECUTED`. | Yes |
     | `FAILED` | Processing failed before orders were generated, or all orders are terminal and at least one is `FAILED`. | Yes |
     | `CANCELLED` | Cancelled before orders were generated, or all orders are terminal, none is `FAILED` and at least one is `CANCELLED`. | Yes |
+    | `REJECTED` | `POST /instructions/batch` only. The instruction was not accepted and was never stored; see the batch result's `error`. Never returned by `GET /instructions/{instructionId}`, and not a state any stored instruction ever transitions through or into. | Yes |
 
     Transitions:
 
@@ -352,9 +353,10 @@ paths:
         '207':
           description: >
             Batch processed. Each instruction was validated and stored
-            independently; check status on each result. An ACCEPTED
-            instruction starts in status PENDING and is tracked exactly
-            like a single POST /instructions submission.
+            independently; check status on each result. A PENDING result
+            means the instruction was stored and is tracked exactly like a
+            single POST /instructions submission. A REJECTED result means
+            it was not stored; see its error.
           content:
             application/json:
               schema:
@@ -365,7 +367,7 @@ paths:
                 results:
 
                   - instructionId: 100001
-                    status: ACCEPTED
+                    status: PENDING
 
                   - instructionId: 100002
                     status: REJECTED
@@ -925,8 +927,12 @@ components:
       type: object
       additionalProperties: false
       description: >
-        Result of submitting one instruction from the batch. error is
-        present only when status is REJECTED.
+        Result of submitting one instruction from the batch. status is
+        always PENDING or REJECTED here, never any other InstructionStatus
+        value: PENDING means the instruction was stored, exactly as in
+        POST /instructions, and is tracked with
+        GET /instructions/{instructionId}; REJECTED means it was not
+        stored, and error is present with the reason.
 
       required:
         - instructionId
@@ -940,7 +946,7 @@ components:
           description: instructionId of the corresponding instruction in the request.
 
         status:
-          $ref: '#/components/schemas/InstructionBatchResultStatus'
+          $ref: '#/components/schemas/InstructionStatus'
 
         error:
           $ref: '#/components/schemas/ErrorResponse'
@@ -950,7 +956,7 @@ components:
         - properties:
             status:
               enum:
-                - ACCEPTED
+                - PENDING
           not:
             required:
               - error
@@ -961,18 +967,6 @@ components:
                 - REJECTED
           required:
             - error
-
-
-    InstructionBatchResultStatus:
-      type: string
-      description: |
-        - `ACCEPTED`: the instruction was stored with status PENDING,
-          exactly as in POST /instructions. Track it with
-          GET /instructions/{instructionId}.
-        - `REJECTED`: the instruction was not stored. See error.
-      enum:
-        - ACCEPTED
-        - REJECTED
 
 
     InvestmentDetailsResponse:
@@ -1455,7 +1449,7 @@ components:
     InstructionStatus:
       type: string
       description: |
-        Terminal statuses: `EXECUTED`, `FAILED`, `CANCELLED`.
+        Terminal statuses: `EXECUTED`, `FAILED`, `CANCELLED`, `REJECTED`.
 
         - `PENDING`: accepted and stored. Orders have not been generated
           yet.
@@ -1469,6 +1463,9 @@ components:
         - `CANCELLED`: cancelled before orders were generated, or all
           orders are terminal, none is `FAILED` and at least one is
           `CANCELLED`.
+        - `REJECTED`: `POST /instructions/batch` only. The instruction was
+          not accepted and was never stored. Never returned by
+          `GET /instructions/{instructionId}`.
 
         Once orders exist, the status is derived from them. See
         *Instruction status lifecycle* in the API description.
@@ -1479,6 +1476,7 @@ components:
         - EXECUTED
         - FAILED
         - CANCELLED
+        - REJECTED
 
 
     OrderStatus:
