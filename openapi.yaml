@@ -155,7 +155,10 @@ info:
       account. Clients must keep the `instructionId`s they submit.
 
 servers:
-  - url: /api/v1
+  - url: https://vestapi.emofid.com/api/v1
+    description: Production
+  - url: https://vestapi-sandbox.emofid.com/api/v1
+    description: Sandbox
 
 paths:
 
