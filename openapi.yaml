@@ -157,13 +157,11 @@ paths:
         Plan resolution applies to BUY instructions. The
         plan used for execution is chosen in this order:
 
-        1. instructionPlanId
-        2. investmentPlanId
-        3. Existing default plan of the investment account
+        1. investmentPlanId
+        2. Existing default plan of the investment account
 
         For SELL instructions the plan does not affect which assets are
-        sold (see *Instruction policies*). A provided instructionPlanId is
-        still checked for existence.
+        sold (see *Instruction policies*).
 
         For every instruction type, a provided investmentPlanId is stored
         as the default plan of the investment account.
@@ -202,7 +200,6 @@ paths:
                   instructionType: BUY
                   amount: 50000000
                   instructionPolicy: NEW_CASH_ONLY
-                  instructionPlanId: 300001
                   investmentPlanId: 300002
 
               sell:
@@ -245,12 +242,6 @@ paths:
                   value:
                     code: DUPLICATE_INSTRUCTION
                     message: Instruction with the specified instructionId already exists.
-
-                instructionPlanNotFound:
-                  summary: Instruction plan not found
-                  value:
-                    code: INSTRUCTION_PLAN_NOT_FOUND
-                    message: The specified instructionPlanId does not exist.
 
                 investmentPlanNotFound:
                   summary: Investment plan not found
@@ -326,7 +317,6 @@ paths:
                   instructionType: BUY
                   amount: 50000000
                   instructionPolicy: NEW_CASH_ONLY
-                  instructionPlanId: 300001
                   investmentPlanId: 300002
 
                 - instructionId: 100002
@@ -412,7 +402,6 @@ paths:
                 instructionBatchId: 100001
                 instructionBatchBuyAmount: 50000000
                 instructionPolicy: NEW_CASH_ONLY
-                instructionPlanId: 300001
                 investmentPlanId: 300002
                 status: EXECUTED
                 trades:
@@ -475,7 +464,6 @@ paths:
                 instructionType: BUY
                 amount: 50000000
                 instructionPolicy: NEW_CASH_ONLY
-                instructionPlanId: 300001
                 investmentPlanId: 300002
                 status: PARTIALLY_EXECUTED
                 trades:
@@ -713,22 +701,6 @@ components:
         instructionPolicy:
           $ref: '#/components/schemas/InstructionPolicy'
 
-        instructionPlanId:
-          type: integer
-          nullable: true
-          format: int64
-          minimum: 1
-          description: >
-            Execution plan used only for this instruction. It is not stored
-            as the account's default.
-
-            For BUY instructions, instructionPlanId takes
-            precedence over investmentPlanId and over the existing default
-            plan of the investment account.
-
-            For SELL instructions, it is checked for existence but has no
-            effect on execution.
-
         investmentPlanId:
           type: integer
           nullable: true
@@ -740,14 +712,11 @@ components:
             When provided, this plan is stored as the default plan of the
             investment account, for every instruction type.
 
-            For BUY, if instructionPlanId is not provided,
-            investmentPlanId is used for execution.
-
             When creating a new investment account,
             investmentPlanId is required.
 
-            For an existing investment account, if neither
-            instructionPlanId nor investmentPlanId is provided,
+            For an existing investment account, if
+            investmentPlanId is provided,
             the existing default plan of the investment account
             is used. If the account has no default plan, BUY
             is rejected with INVESTMENT_PLAN_REQUIRED.
@@ -809,12 +778,6 @@ components:
 
         instructionPolicy:
           $ref: '#/components/schemas/InstructionPolicy'
-
-        instructionPlanId:
-          type: integer
-          nullable: true
-          format: int64
-          description: instructionPlanId as submitted; null when not provided.
 
         investmentPlanId:
           type: integer
@@ -1326,8 +1289,6 @@ components:
           the instruction type.
         - `DUPLICATE_INSTRUCTION` (400): `instructionId` already exists.
           See *Retries and idempotency*.
-        - `INSTRUCTION_PLAN_NOT_FOUND` (400): `instructionPlanId` does not
-          refer to an existing plan.
         - `INVESTMENT_PLAN_NOT_FOUND` (400): `investmentPlanId` does not
           refer to an existing plan.
         - `INVESTMENT_PLAN_REQUIRED` (400): no plan could be resolved,
