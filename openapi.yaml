@@ -199,7 +199,6 @@ paths:
                   investmentId: 200001
                   instructionType: BUY
                   amount: 50000000
-                  instructionPolicy: NEW_CASH_ONLY
                   investmentPlanId: 300002
 
               sell:
@@ -209,7 +208,6 @@ paths:
                   investmentId: 200001
                   instructionType: SELL
                   amount: 25000000
-                  instructionPolicy: PROPORTIONAL
 
       responses:
 
@@ -261,12 +259,6 @@ paths:
                     code: INVESTMENT_NOT_FOUND
                     message: The specified investment account does not exist.
 
-                invalidInstructionPolicy:
-                  summary: Invalid instruction policy
-                  value:
-                    code: INVALID_INSTRUCTION_POLICY
-                    message: instructionPolicy is not valid for the specified instructionType.
-
                 amountRequired:
                   summary: Amount required
                   value:
@@ -316,14 +308,12 @@ paths:
                   investmentId: 200001
                   instructionType: BUY
                   amount: 50000000
-                  instructionPolicy: NEW_CASH_ONLY
                   investmentPlanId: 300002
 
                 - instructionId: 100002
                   investmentId: 200001
                   instructionType: BUY
                   amount: 25000000
-                  instructionPolicy: PROPORTIONAL
 
       responses:
 
@@ -401,7 +391,6 @@ paths:
               example:
                 instructionBatchId: 100001
                 instructionBatchBuyAmount: 50000000
-                instructionPolicy: NEW_CASH_ONLY
                 investmentPlanId: 300002
                 status: EXECUTED
                 trades:
@@ -463,7 +452,6 @@ paths:
                 investmentId: 200001
                 instructionType: BUY
                 amount: 50000000
-                instructionPolicy: NEW_CASH_ONLY
                 investmentPlanId: 300002
                 status: PARTIALLY_EXECUTED
                 trades:
@@ -647,7 +635,6 @@ components:
         - instructionId
         - investmentId
         - instructionType
-        - instructionPolicy
 
       properties:
 
@@ -698,8 +685,6 @@ components:
             the value available to sell, otherwise the instruction becomes
             FAILED.
 
-        instructionPolicy:
-          $ref: '#/components/schemas/InstructionPolicy'
 
         investmentPlanId:
           type: integer
@@ -727,9 +712,6 @@ components:
             instructionType:
               enum:
                 - BUY
-            instructionPolicy:
-              enum:
-                - NEW_CASH_ONLY
           required:
             - amount
 
@@ -737,10 +719,6 @@ components:
             instructionType:
               enum:
                 - SELL
-            instructionPolicy:
-              enum:
-                - ALL_ASSET
-                - PROPORTIONAL
           required:
             - amount
 
@@ -753,7 +731,6 @@ components:
         - instructionId
         - investmentId
         - instructionType
-        - instructionPolicy
         - status
 
       properties:
@@ -775,9 +752,6 @@ components:
           format: int64
           description: >
             Total monetary amount of the instruction, in Rial, as submitted.
-
-        instructionPolicy:
-          $ref: '#/components/schemas/InstructionPolicy'
 
         investmentPlanId:
           type: integer
@@ -1201,25 +1175,6 @@ components:
       enum:
         - BUY
         - SELL
-
-
-    InstructionPolicy:
-      type: string
-      description: |
-        Allowed values per instruction type:
-
-        - `NEW_CASH_ONLY` (BUY only): split `amount` of new cash across the
-          plan's assets by target weight. Existing cash and holdings are not
-          used.
-        - `PROPORTIONAL` (SELL): sell `amount` across holdings in proportion
-          to their current market value. Cash is not used.
-        - `ALL_ASSET` (SELL): raise `amount` from all assets, cash included.
-          Available cash is used first, and the remainder is sold
-          proportionally. It does not mean "liquidate everything".
-      enum:
-        - NEW_CASH_ONLY
-        - ALL_ASSET
-        - PROPORTIONAL
 
 
     InstructionStatus:
