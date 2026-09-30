@@ -10,11 +10,10 @@ info:
     ## Conventions
 
     - **Monetary unit.** Every monetary value in this API (`amount`,
-      `executedAmount`, `price`, `lastMarketPrice`, `cashBalance`,
+      `price`, `lastMarketPrice`, `cashBalance`,
       `investmentValue`) is an integer number of **Iranian Rial (IRR)**.
       Toman is never used.
-    - **Money identity.** For an order, `executedAmount` equals the sum of
-      `quantity × price` over its trades. For an account, `investmentValue`
+    - **Money identity.** For an account, `investmentValue`
       equals `cashBalance` plus the sum of `quantity × lastMarketPrice` over
       its assets.
     - **Timestamps.** All `date-time` values, in requests and responses,
@@ -30,58 +29,33 @@ info:
     starts in status `PENDING`. No push mechanism (webhooks or callbacks)
     exists. Clients track progress with `GET /instructions/{instructionId}`
     until the instruction reaches a terminal
-    status (`EXECUTED`, `FAILED`, `CANCELLED`).
+    status (`COMPLETED`, `FAILED`).
 
     ## Instruction status lifecycle
 
     | Status | Meaning | Terminal |
     |---|---|---|
-    | `PENDING` | Accepted and stored. Orders have not been generated yet. | No |
-    | `EXECUTING` | Orders have been generated and are being executed, but none has any executed quantity. | No |
-    | `PARTIALLY_EXECUTED` | At least one order has executed quantity, and at least one order is not yet terminal. | No |
-    | `EXECUTED` | All orders are `EXECUTED`. | Yes |
-    | `FAILED` | Processing failed before orders were generated, or all orders are terminal and at least one is `FAILED`. | Yes |
-    | `CANCELLED` | Cancelled before orders were generated, or all orders are terminal, none is `FAILED` and at least one is `CANCELLED`. | Yes |
+    | `PENDING` | Accepted and stored. deposit/withdraw have not been generated yet. | No |
+    | `EXECUTING` | Deposit/Withdraw have been generated and are being executed, but none has any executed quantity. | No |
+    | `PARTIALLY_COMPLETED` | At least one instruction has completed. | No |
+    | `COMPLETED` | All instruction are `COMPLETED`. | Yes |
+    | `FAILED` | Processing failed before instructions were executed | Yes |
     | `REJECTED` | `POST /instructions/batch` only. The instruction was not accepted and was never stored; see the batch result's `error`. Never returned by `GET /instructions/{instructionId}`, and not a state any stored instruction ever transitions through or into. | Yes |
 
     Transitions:
 
     | From | To | Trigger |
     |---|---|---|
-    | `PENDING` | `EXECUTING` | Orders are generated. |
-    | `EXECUTING` | `PARTIALLY_EXECUTED` | The first trade on any order. |
-    | `EXECUTING`, `PARTIALLY_EXECUTED` | `EXECUTED`, `FAILED`, `CANCELLED` | The last non-terminal order becomes terminal. The status is derived from the order statuses as described below. |
+    | `PENDING` | `EXECUTING` | instructions side effects are generated. |
+    | `EXECUTING` | `PARTIALLY_COMPLETED` | The first side effect on any instruction. |
+    | `EXECUTING`, `PARTIALLY_COMPLETED` | `COMPLETED`, `FAILED` | The last non-terminal instruction becomes terminal. The status is derived from the instructions statuses as described below. |
     | `PENDING` | `FAILED` | A business rule fails at processing time. Examples: SELL `amount` is greater than the value available to sell. |
-    | `PENDING` | `CANCELLED` | The instruction is cancelled before orders are generated. |
-
-    Once orders exist, the instruction status is **always derived** from
-    the order statuses:
-
-    1. If all orders are terminal: `EXECUTED` when all are `EXECUTED`;
-       otherwise `FAILED` when any is `FAILED`; otherwise `CANCELLED`.
-    2. If some orders are not terminal: `PARTIALLY_EXECUTED` when any
-       order has `executedQuantity > 0`; otherwise `EXECUTING`.
-
-    A terminal `FAILED` or `CANCELLED` instruction may still have
-    executed orders or partial fills. Check `executedAmount` of each
-    order for what was actually traded.
-
-    ## Instruction policies
-
-    | Instruction type | Policy | Meaning |
-    |---|---|---|
-    | `BUY` | `NEW_CASH_ONLY` | `amount` is new cash invested by this instruction. It is split across the resolved plan's assets by their target weights. Existing `cashBalance` and holdings are not used and not sold. |
-    | `SELL` | `PROPORTIONAL` | Raises `amount` by selling each held asset in proportion to its share of the market value of the holdings. `cashBalance` is not used, and the relative weights of the holdings are kept. |
-    | `SELL` | `ALL_ASSET` | Raises `amount` from all of the account's assets, **cash included**. Available `cashBalance` is used first. Only the remainder, if any, is raised by selling holdings proportionally, as in `PROPORTIONAL`. It does **not** mean "liquidate everything". To withdraw the whole account, send `amount` equal to the current `investmentValue`. |
-
-    Any other combination is rejected with `INVALID_INSTRUCTION_POLICY`.
 
     ## Plans
 
     A plan defines a set of assets and their target weights. This version
     of the API has no plan-discovery endpoint. A plan ID in a request must
-    refer to an existing plan, otherwise `INSTRUCTION_PLAN_NOT_FOUND` or
-    `INVESTMENT_PLAN_NOT_FOUND` is returned.
+    refer to an existing plan, otherwise `INVESTMENT_PLAN_NOT_FOUND` is returned.
 
     ## Errors
 
@@ -235,11 +209,6 @@ paths:
       operationId: getInstructionBatch
       summary: Get instruction Batch details and execution status
       description: >
-        Returns instruction details, current execution status,
-        and monetary orders generated from the instruction.
-        The orders array is empty while the status is PENDING,
-        and when the instruction failed or was cancelled
-        before orders were generated.
         An invalid instructionId returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
@@ -285,10 +254,6 @@ paths:
       summary: Get instruction details and execution status
       description: >
         Returns instruction details, current execution status,
-        and monetary orders generated from the instruction.
-        The orders array is empty while the status is PENDING,
-        and when the instruction failed or was cancelled
-        before orders were generated.
         An invalid instructionId returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
@@ -1031,17 +996,17 @@ components:
       description: |
         Terminal statuses: `COMPLETED`, `FAILED`, `REJECTED`.
 
-        - `PENDING`: accepted and stored. Orders have not been generated
+        - `PENDING`: accepted and stored. Deposits/withdrawals have not been generated
           yet.
-        - `COMPLETED`: orders generated and being executed, none has any
+        - `COMPLETED`: Deposits/withdrawals generated and being executed, none has any
           executed quantity.
-        - `FAILED`: processing failed before orders were generated, or all
-          orders are terminal and at least one is `FAILED`.
+        - `FAILED`: processing failed before Deposits/withdrawals were generated, or all
+          Deposits/withdrawals are terminal and at least one is `FAILED`.
         - `REJECTED`: `POST /instructions/batch` only. The instruction was
           not accepted and was never stored. Never returned by
           `GET /instructions/{instructionId}`.
 
-        Once orders exist, the status is derived from them. See
+        Once Deposits/withdrawals exist, the status is derived from them. See
         *Instruction status lifecycle* in the API description.
       enum:
         - PENDING
