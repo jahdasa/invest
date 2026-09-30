@@ -25,12 +25,13 @@ info:
 
     ## Asynchronous processing
 
-    Instructions are executed asynchronously. A successful
-    `POST /instructions` only means the instruction was accepted; it
-    starts in status `PENDING`. No push mechanism (webhooks or callbacks)
-    exists. Clients track progress with `GET /instructions/{instructionId}`
-    until the instruction reaches a terminal
-    status (`COMPLETED`, `FAILED`).
+    Instructions are submitted through `POST /instructions/batch` and are
+    executed asynchronously. A `PENDING` result means the individual
+    instruction was accepted and stored; it does not mean execution has
+    completed. No push mechanism (webhooks or callbacks) exists. Clients
+    track each accepted instruction with `GET /instructions/{instructionId}`
+    until it reaches a terminal status (`COMPLETED`,
+    `PARTIALLY_COMPLETED`, or `FAILED`).
 
     ## Instruction status lifecycle
 
@@ -38,7 +39,7 @@ info:
     |---|---|---|
     | `PENDING` | Accepted and stored; processing has not started yet. | No |
     | `EXECUTING` | Processing has started. | No |
-    | `PARTIALLY_COMPLETED` | Part of the instruction has completed, but processing is still in progress. | No |
+    | `PARTIALLY_COMPLETED` | Processing has finished, but only part of the instruction was completed. No further execution will occur for this instruction. | Yes |
     | `COMPLETED` | The instruction completed successfully. | Yes |
     | `FAILED` | The instruction could not be completed. | Yes |
 
@@ -51,9 +52,9 @@ info:
     | From | To | Trigger |
     |---|---|---|
     | `PENDING` | `EXECUTING` | Processing starts. |
-    | `EXECUTING` | `PARTIALLY_COMPLETED` | Part of the instruction completes while other work remains. |
-    | `EXECUTING`, `PARTIALLY_COMPLETED` | `COMPLETED` | Processing finishes successfully. |
-    | `PENDING`, `EXECUTING`, `PARTIALLY_COMPLETED` | `FAILED` | A processing or business-rule failure prevents successful completion. |
+    | `EXECUTING` | `COMPLETED` | Processing finishes and the instruction is completed in full. |
+    | `EXECUTING` | `PARTIALLY_COMPLETED` | Processing finishes after only part of the instruction could be completed; no further execution will occur. |
+    | `PENDING`, `EXECUTING` | `FAILED` | A processing or business-rule failure prevents completion. |
 
     ## Plans
 
@@ -63,10 +64,11 @@ info:
 
     ## Errors
 
-    - All request validation and business-rule errors of
-      `POST /instructions` return **HTTP 400**, including
-      `DUPLICATE_INSTRUCTION` and `*_NOT_FOUND`. Clients must branch on
-      `code`, not on the HTTP status.
+    - `POST /instructions/batch` returns **HTTP 400** only when the batch
+      request itself is malformed. Validation and business-rule errors for an
+      individual instruction are returned in that item's batch result with
+      status `REJECTED` and an `error.code`. Clients must branch on `code`,
+      not on the batch HTTP status.
     - JSON Schema violations map to specific codes where one exists:
       a missing `amount` for BUY or SELL → `AMOUNT_REQUIRED`;
       an `amount` below 1 → `INVALID_AMOUNT`. Every other
@@ -82,7 +84,8 @@ info:
       500 (unexpected error) and 503 (temporarily unavailable).
       Their bodies are not guaranteed to follow `ErrorResponse`. Retry 429
       and 503 with backoff. After a 500 or a timeout on
-      `POST /instructions`, the outcome is unknown: reconcile with
+      `POST /instructions/batch`, the outcome of individual items may be
+      unknown: reconcile accepted items with
       `GET /instructions/{instructionId}` (see *Retries and idempotency*).
     - `ErrorResponse` has no trace ID and no per-field details. When
       reporting a problem, include the `code`, the request timestamp (UTC)
@@ -90,18 +93,21 @@ info:
 
     ## Retries and idempotency
 
-    `instructionId` is the idempotency key. It must be **globally unique
-    across all clients** and must never be reused, even after the
-    instruction is terminal. After a timeout or a 5xx, the client should
-    resend the same request with the same `instructionId`:
+    `instructionId` is the idempotency key for each item in a batch. It must
+    be **globally unique across all clients** and must never be reused, even
+    after the instruction is terminal. `instructionBatchId` is a correlation
+    identifier and is not the idempotency key.
 
-    - Success (201): the first attempt had not been stored. The
-      instruction is now accepted.
-    - `DUPLICATE_INSTRUCTION`: an instruction with this ID already
-      exists. The server does not check whether the payload is the same.
-      Call `GET /instructions/{instructionId}`: if the returned details
-      match the request, the first attempt succeeded and nothing more is
-      needed; otherwise the ID collides with another instruction and a new
+    After a timeout or a 5xx on `POST /instructions/batch`, the client may
+    resend the same batch with the same instruction payloads and the same
+    `instructionId` values. For each item:
+
+    - `PENDING`: the instruction was accepted by this submission and stored.
+    - `REJECTED` with `DUPLICATE_INSTRUCTION`: an instruction with this ID
+      already exists. The server does not check whether the payload is the
+      same. Call `GET /instructions/{instructionId}`: if the returned details
+      match the submitted item, an earlier attempt succeeded and nothing more
+      is needed; otherwise the ID collides with another instruction and a new
       `instructionId` must be used.
 
     ## Known limitations of this version
@@ -122,58 +128,16 @@ servers:
 
 paths:
 
-  /instructions:
-    post:
-      operationId: submitInstruction
-      summary: Submit an investment instruction
-      description: |
-        Submits a single BUY or SELL instruction for asynchronous processing.
-        A successful response means the instruction was accepted and stored;
-        it does not mean execution has completed.
-
-        No generated order, trade, or per-asset execution detail is returned.
-        Use `GET /instructions/{instructionId}` to retrieve the current
-        instruction-level status.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InstructionRequest'
-            example:
-              instructionId: 100001
-              investmentId: 200001
-              instructionType: BUY
-              amount: 50000000
-              investmentPlanId: 300002
-      responses:
-        '201':
-          description: Instruction accepted and stored
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InstructionAcceptedResponse'
-              example:
-                instructionId: 100001
-                status: PENDING
-        '400':
-          description: Request validation or business-rule error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
   /instructions/batch:
     post:
       operationId: submitInstructionBatch
       summary: Submit a batch of investment instructions
       description: |
-        Submits multiple BUY or SELL instructions in a single request.
-        Each instruction is validated and processed independently,
-        exactly as in `POST /instructions`: the failure of one
-        instruction does not prevent the others from being accepted. See
-        *Errors* and *Retries and idempotency* —
-        the same rules apply to every instruction in the batch.
+        Submits one or more BUY or SELL instructions in a single request.
+        Each instruction is validated and processed independently; the failure
+        or rejection of one instruction does not prevent the others from being
+        accepted. A batch containing a single instruction is valid. See
+        *Errors* and *Retries and idempotency* for submission and retry rules.
 
         The response always has HTTP status 207, with one result per
         submitted instruction, in the same order as the request. Check
@@ -211,9 +175,9 @@ paths:
           description: >
             Batch processed. Each instruction was validated and stored
             independently; check status on each result. A PENDING result
-            means the instruction was stored and is tracked exactly like a
-            single POST /instructions submission. A REJECTED result means
-            it was not stored; see its error.
+            means the instruction was stored and can be tracked with
+            GET /instructions/{instructionId}. A REJECTED result means it was
+            not stored; see its error.
           content:
             application/json:
               schema:
@@ -582,23 +546,6 @@ components:
             - amount
 
 
-    InstructionAcceptedResponse:
-      type: object
-      additionalProperties: false
-      required:
-        - instructionId
-        - status
-      properties:
-        instructionId:
-          type: integer
-          format: int64
-        status:
-          type: string
-          enum:
-            - PENDING
-          description: The instruction was accepted and stored for asynchronous processing.
-
-
     InstructionDetailsResponse:
       type: object
       additionalProperties: false
@@ -687,8 +634,8 @@ components:
           type: array
           minItems: 1
           description: >
-            Instructions to submit. Each is validated and processed
-            independently, exactly as in POST /instructions.
+            Instructions to submit. Each item is validated independently.
+            A batch may contain one or more instructions.
           items:
             $ref: '#/components/schemas/InstructionRequest'
 
@@ -722,11 +669,10 @@ components:
       additionalProperties: false
       description: >
         Result of submitting one instruction from the batch. status is
-        always PENDING or REJECTED here, never any other InstructionStatus
-        value: PENDING means the instruction was stored, exactly as in
-        POST /instructions, and is tracked with
-        GET /instructions/{instructionId}; REJECTED means it was not
-        stored, and error is present with the reason.
+        always PENDING or REJECTED here: PENDING means the instruction was
+        accepted and stored and can be tracked with
+        GET /instructions/{instructionId}; REJECTED means it was not stored,
+        and error is present with the reason.
 
       required:
         - instructionId
@@ -1058,10 +1004,13 @@ components:
 
         - `PENDING`: accepted and stored; processing has not started yet.
         - `EXECUTING`: processing has started.
-        - `PARTIALLY_COMPLETED`: part of the instruction has completed while
-          other work remains.
-        - `COMPLETED`: processing completed successfully.
-        - `FAILED`: the instruction could not be completed.
+        - `PARTIALLY_COMPLETED`: processing has finished, but only part of
+          the instruction was completed. No further execution will occur for
+          this instruction. This is a terminal status.
+        - `COMPLETED`: processing completed successfully in full. This is a
+          terminal status.
+        - `FAILED`: the instruction could not be completed. This is a terminal
+          status.
 
         These statuses are intentionally instruction-level. The API does not
         expose the generated orders or their individual execution states.
