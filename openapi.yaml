@@ -5,7 +5,8 @@ info:
   version: 1.0.0
   description: |
     API for submitting investment instructions and retrieving
-    their execution status and generated monetary orders.
+    their current execution status. The instruction endpoints do not expose
+    generated orders, trades, or per-asset execution details.
 
     ## Conventions
 
@@ -35,21 +36,24 @@ info:
 
     | Status | Meaning | Terminal |
     |---|---|---|
-    | `PENDING` | Accepted and stored. deposit/withdraw have not been generated yet. | No |
-    | `EXECUTING` | Deposit/Withdraw have been generated and are being executed, but none has any executed quantity. | No |
-    | `PARTIALLY_COMPLETED` | At least one instruction has completed. | No |
-    | `COMPLETED` | All instruction are `COMPLETED`. | Yes |
-    | `FAILED` | Processing failed before instructions were executed | Yes |
-    | `REJECTED` | `POST /instructions/batch` only. The instruction was not accepted and was never stored; see the batch result's `error`. Never returned by `GET /instructions/{instructionId}`, and not a state any stored instruction ever transitions through or into. | Yes |
+    | `PENDING` | Accepted and stored; processing has not started yet. | No |
+    | `EXECUTING` | Processing has started. | No |
+    | `PARTIALLY_COMPLETED` | Part of the instruction has completed, but processing is still in progress. | No |
+    | `COMPLETED` | The instruction completed successfully. | Yes |
+    | `FAILED` | The instruction could not be completed. | Yes |
+
+    `REJECTED` is not an instruction lifecycle state. It is used only in
+    `POST /instructions/batch` results when an individual item is not accepted
+    and therefore is never stored.
 
     Transitions:
 
     | From | To | Trigger |
     |---|---|---|
-    | `PENDING` | `EXECUTING` | instructions side effects are generated. |
-    | `EXECUTING` | `PARTIALLY_COMPLETED` | The first side effect on any instruction. |
-    | `EXECUTING`, `PARTIALLY_COMPLETED` | `COMPLETED`, `FAILED` | The last non-terminal instruction becomes terminal. The status is derived from the instructions statuses as described below. |
-    | `PENDING` | `FAILED` | A business rule fails at processing time. Examples: SELL `amount` is greater than the value available to sell. |
+    | `PENDING` | `EXECUTING` | Processing starts. |
+    | `EXECUTING` | `PARTIALLY_COMPLETED` | Part of the instruction completes while other work remains. |
+    | `EXECUTING`, `PARTIALLY_COMPLETED` | `COMPLETED` | Processing finishes successfully. |
+    | `PENDING`, `EXECUTING`, `PARTIALLY_COMPLETED` | `FAILED` | A processing or business-rule failure prevents successful completion. |
 
     ## Plans
 
@@ -65,8 +69,7 @@ info:
       `code`, not on the HTTP status.
     - JSON Schema violations map to specific codes where one exists:
       a missing `amount` for BUY or SELL → `AMOUNT_REQUIRED`;
-      an `amount` below 1 → `INVALID_AMOUNT`; a policy that does not match
-      the instruction type → `INVALID_INSTRUCTION_POLICY`. Every other
+      an `amount` below 1 → `INVALID_AMOUNT`. Every other
       schema violation (malformed JSON, a wrong type, a missing required
       field, an unknown property, an unknown enum value) →
       `INVALID_REQUEST`.
@@ -104,9 +107,9 @@ info:
     ## Known limitations of this version
 
     - Instructions have no creation or update timestamps.
-      Trade timestamps are the only execution times available.
-    - No failure reason is exposed for `FAILED` instructions .
-    - Trades have no trade identifier.
+    - No failure reason is exposed for `FAILED` instructions.
+    - Instruction endpoints expose only instruction-level status; generated
+      orders, trades, and per-asset execution details are intentionally not returned.
     - The investment transactions endpoint is not paginated.
     - There is no endpoint that lists the instructions of an investment
       account. Clients must keep the `instructionId`s they submit.
@@ -119,6 +122,47 @@ servers:
 
 paths:
 
+  /instructions:
+    post:
+      operationId: submitInstruction
+      summary: Submit an investment instruction
+      description: |
+        Submits a single BUY or SELL instruction for asynchronous processing.
+        A successful response means the instruction was accepted and stored;
+        it does not mean execution has completed.
+
+        No generated order, trade, or per-asset execution detail is returned.
+        Use `GET /instructions/{instructionId}` to retrieve the current
+        instruction-level status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstructionRequest'
+            example:
+              instructionId: 100001
+              investmentId: 200001
+              instructionType: BUY
+              amount: 50000000
+              investmentPlanId: 300002
+      responses:
+        '201':
+          description: Instruction accepted and stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstructionAcceptedResponse'
+              example:
+                instructionId: 100001
+                status: PENDING
+        '400':
+          description: Request validation or business-rule error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /instructions/batch:
     post:
       operationId: submitInstructionBatch
@@ -128,7 +172,7 @@ paths:
         Each instruction is validated and processed independently,
         exactly as in `POST /instructions`: the failure of one
         instruction does not prevent the others from being accepted. See
-        *Instruction policies*, *Errors* and *Retries and idempotency* —
+        *Errors* and *Retries and idempotency* —
         the same rules apply to every instruction in the batch.
 
         The response always has HTTP status 207, with one result per
@@ -148,8 +192,6 @@ paths:
 
             example:
               instructionBatchId: 600001
-              instructionBatchBuyAmount: 75000000
-              instructionBatchSellAmount: 0
               instructions:
 
                 - instructionId: 100001
@@ -207,16 +249,18 @@ paths:
   /instructions/batch/{instructionBatchId}:
     get:
       operationId: getInstructionBatch
-      summary: Get instruction Batch details and execution status
+      summary: Get instruction batch status
       description: >
-        An invalid instructionId returns HTTP 400 with INVALID_REQUEST.
+        Returns the current batch-level status. No generated order or execution
+        detail is returned. An invalid instructionBatchId returns HTTP 400 with
+        INVALID_REQUEST.
 
       parameters:
 
         - name: instructionBatchId
           in: path
           required: true
-          description: Unique identifier of the instruction
+          description: Unique identifier of the instruction batch
           schema:
             type: integer
             format: int64
@@ -225,16 +269,14 @@ paths:
       responses:
 
         '200':
-          description: Instruction details and execution status
+          description: Instruction batch status
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InstructionBatchDetailsResponse'
 
               example:
-                instructionBatchId: 100001
-                instructionBatchBuyAmount: 50000000
-                investmentPlanId: 300002
+                instructionBatchId: 600001
                 status: COMPLETED
 
         '404':
@@ -245,16 +287,17 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
               example:
-                code: INSTRUCTION_Batch_NOT_FOUND
-                message: Instruction with the specified instructionBatchId does not exist.
+                code: INSTRUCTION_BATCH_NOT_FOUND
+                message: Instruction batch with the specified instructionBatchId does not exist.
 
   /instructions/{instructionId}:
     get:
       operationId: getInstruction
       summary: Get instruction details and execution status
       description: >
-        Returns instruction details, current execution status,
-        An invalid instructionId returns HTTP 400 with INVALID_REQUEST.
+        Returns the submitted instruction fields and its current instruction-level
+        status. Generated orders, trades, and per-asset execution details are not
+        returned. An invalid instructionId returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
 
@@ -270,7 +313,7 @@ paths:
       responses:
 
         '200':
-          description: Instruction details and execution status
+          description: Instruction details and current status
           content:
             application/json:
               schema:
@@ -500,8 +543,7 @@ components:
 
             BUY (required): new cash to invest according to the plan.
 
-            SELL (required): cash to raise for withdrawal; see the
-            instruction policy for how it is sourced. It must not exceed
+            SELL (required): cash to raise for withdrawal. It must not exceed
             the value available to sell, otherwise the instruction becomes
             FAILED.
 
@@ -514,17 +556,14 @@ components:
           description: >
             Default investment plan of the investment account.
 
-            When provided, this plan is stored as the default plan of the
-            investment account, for every instruction type.
+            When provided, this plan becomes the default plan of the
+            investment account.
 
-            When creating a new investment account,
-            investmentPlanId is required.
+            When creating a new investment account, investmentPlanId is required.
 
-            For an existing investment account, if
-            investmentPlanId is provided,
-            the existing default plan of the investment account
-            is used. If the account has no default plan, BUY
-            is rejected with INVESTMENT_PLAN_REQUIRED.
+            For an existing investment account, if investmentPlanId is omitted,
+            the account's current default plan is used. If no default plan exists,
+            BUY is rejected with INVESTMENT_PLAN_REQUIRED.
 
       oneOf:
 
@@ -543,9 +582,30 @@ components:
             - amount
 
 
+    InstructionAcceptedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - instructionId
+        - status
+      properties:
+        instructionId:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+            - PENDING
+          description: The instruction was accepted and stored for asynchronous processing.
+
+
     InstructionDetailsResponse:
       type: object
       additionalProperties: false
+      description: >
+        Submitted instruction fields plus the current instruction-level status.
+        This schema intentionally does not expose generated orders, trades, or
+        per-asset execution details.
 
       required:
         - instructionId
@@ -680,7 +740,7 @@ components:
           description: instructionId of the corresponding instruction in the request.
 
         status:
-          $ref: '#/components/schemas/InstructionStatus'
+          $ref: '#/components/schemas/InstructionSubmissionStatus'
 
         error:
           $ref: '#/components/schemas/ErrorResponse'
@@ -994,24 +1054,33 @@ components:
     InstructionStatus:
       type: string
       description: |
-        Terminal statuses: `COMPLETED`, `FAILED`, `REJECTED`.
+        Instruction-level processing status.
 
-        - `PENDING`: accepted and stored. Deposits/withdrawals have not been generated
-          yet.
-        - `COMPLETED`: Deposits/withdrawals generated and being executed, none has any
-          executed quantity.
-        - `FAILED`: processing failed before Deposits/withdrawals were generated, or all
-          Deposits/withdrawals are terminal and at least one is `FAILED`.
-        - `REJECTED`: `POST /instructions/batch` only. The instruction was
-          not accepted and was never stored. Never returned by
-          `GET /instructions/{instructionId}`.
+        - `PENDING`: accepted and stored; processing has not started yet.
+        - `EXECUTING`: processing has started.
+        - `PARTIALLY_COMPLETED`: part of the instruction has completed while
+          other work remains.
+        - `COMPLETED`: processing completed successfully.
+        - `FAILED`: the instruction could not be completed.
 
-        Once Deposits/withdrawals exist, the status is derived from them. See
-        *Instruction status lifecycle* in the API description.
+        These statuses are intentionally instruction-level. The API does not
+        expose the generated orders or their individual execution states.
       enum:
         - PENDING
+        - EXECUTING
+        - PARTIALLY_COMPLETED
         - COMPLETED
         - FAILED
+
+    InstructionSubmissionStatus:
+      type: string
+      description: |
+        Result of submitting an individual item in a batch.
+
+        - `PENDING`: accepted and stored for asynchronous processing.
+        - `REJECTED`: not accepted and never stored.
+      enum:
+        - PENDING
         - REJECTED
 
     ErrorResponse:
@@ -1045,8 +1114,6 @@ components:
           code applies.
         - `AMOUNT_REQUIRED` (400): `amount` is missing for BUY or SELL.
         - `INVALID_AMOUNT` (400): `amount` is below 1.
-        - `INVALID_INSTRUCTION_POLICY` (400): the policy is not allowed for
-          the instruction type.
         - `DUPLICATE_INSTRUCTION` (400): `instructionId` already exists.
           See *Retries and idempotency*.
         - `INVESTMENT_PLAN_NOT_FOUND` (400): `investmentPlanId` does not
@@ -1059,11 +1126,9 @@ components:
         - `INSTRUCTION_NOT_FOUND` (404): the instruction does not exist.
       enum:
         - DUPLICATE_INSTRUCTION
-        - INSTRUCTION_PLAN_NOT_FOUND
         - INVESTMENT_PLAN_NOT_FOUND
         - INVESTMENT_NOT_FOUND
         - INVESTMENT_PLAN_REQUIRED
-        - INVALID_INSTRUCTION_POLICY
         - AMOUNT_REQUIRED
         - INVALID_AMOUNT
         - INVALID_REQUEST
