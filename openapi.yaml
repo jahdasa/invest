@@ -376,6 +376,66 @@ paths:
                 code: INVALID_REQUEST
                 message: instructions must be a non-empty array.
 
+  /instructions/batch/{instructionBatchId}:
+    get:
+      operationId: getInstructionBatch
+      summary: Get instruction Batch details and execution status
+      description: >
+        Returns instruction details, current execution status,
+        and monetary orders generated from the instruction.
+        The orders array is empty while the status is PENDING,
+        and when the instruction failed or was cancelled
+        before orders were generated.
+        An invalid instructionId returns HTTP 400 with INVALID_REQUEST.
+
+      parameters:
+
+        - name: instructionBatchId
+          in: path
+          required: true
+          description: Unique identifier of the instruction
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+      responses:
+
+        '200':
+          description: Instruction details and execution status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstructionBatchDetailsResponse'
+
+              example:
+                instructionBatchId: 100001
+                instructionBatchBuyAmount: 50000000
+                instructionPolicy: NEW_CASH_ONLY
+                instructionPlanId: 300001
+                investmentPlanId: 300002
+                status: EXECUTED
+                trades:
+                  - quantity: 1000
+                    symbol: عیار
+                    price: 13300
+                    timestamp: '2026-09-27T09:30:00Z'
+
+                  - quantity: 500
+                    symbol: توان
+                    price: 13400
+                    timestamp: '2026-09-27T10:05:00Z'
+
+        '404':
+          description: Instruction Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+              example:
+                code: INSTRUCTION_Batch_NOT_FOUND
+                message: Instruction with the specified instructionBatchId does not exist.
 
   /instructions/{instructionId}:
     get:
@@ -765,6 +825,23 @@ components:
         status:
           $ref: '#/components/schemas/InstructionStatus'
 
+
+    InstructionBatchDetailsResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - instructionBatchId
+        - status
+
+      properties:
+
+        instructionBatchId:
+          type: integer
+          format: int64
+
+        status:
+          $ref: '#/components/schemas/InstructionStatus'
 
     InstructionBatchRequest:
       type: object
