@@ -145,133 +145,6 @@ servers:
 
 paths:
 
-  /instructions:
-    post:
-      operationId: submitInstruction
-      summary: Submit investment instruction
-      description: |
-        Submits a BUY or SELL instruction for asynchronous
-        execution. See *Instruction policies* for the meaning of each
-        policy.
-
-        Plan resolution applies to BUY instructions. The
-        plan used for execution is chosen in this order:
-
-        1. investmentPlanId
-        2. Existing default plan of the investment account
-
-        For SELL instructions the plan does not affect which assets are
-        sold (see *Instruction policies*).
-
-        For every instruction type, a provided investmentPlanId is stored
-        as the default plan of the investment account.
-
-        Account existence:
-
-        - BUY: when the investment account does not exist, it is created
-          with the given investmentId. In that case investmentPlanId is
-          required (`INVESTMENT_PLAN_REQUIRED`).
-        - SELL: the investment account must already exist
-          (`INVESTMENT_NOT_FOUND`).
-
-        On success the response is **201 with an empty body**. The
-        instruction has been stored with status `PENDING` and will be
-        processed asynchronously. Track it with
-        `GET /instructions/{instructionId}`. See *Asynchronous processing*
-        and *Retries and idempotency*.
-
-        All errors of this operation are returned as HTTP 400 and are told
-        apart by `code` (see *Errors*).
-
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InstructionRequest'
-
-            examples:
-
-              buy:
-                summary: Buy instruction
-                value:
-                  instructionId: 100001
-                  investmentId: 200001
-                  instructionType: BUY
-                  amount: 50000000
-                  investmentPlanId: 300002
-
-              sell:
-                summary: Sell instruction
-                value:
-                  instructionId: 100002
-                  investmentId: 200001
-                  instructionType: SELL
-                  amount: 25000000
-
-      responses:
-
-        '201':
-          description: >
-            Instruction accepted with status PENDING. The response body is
-            empty. Execution is asynchronous; use
-            GET /instructions/{instructionId} for its status.
-
-        '400':
-          description: >
-            Invalid instruction. Covers schema validation errors, business
-            rule errors, unknown referenced resources, and a duplicate
-            instructionId. Branch on `code`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-              examples:
-
-                invalidRequest:
-                  summary: Invalid request
-                  value:
-                    code: INVALID_REQUEST
-                    message: Request body is malformed or does not match the schema.
-
-                duplicateInstruction:
-                  summary: Duplicate instruction
-                  value:
-                    code: DUPLICATE_INSTRUCTION
-                    message: Instruction with the specified instructionId already exists.
-
-                investmentPlanNotFound:
-                  summary: Investment plan not found
-                  value:
-                    code: INVESTMENT_PLAN_NOT_FOUND
-                    message: The specified investmentPlanId does not exist.
-
-                investmentPlanRequired:
-                  summary: Investment plan required
-                  value:
-                    code: INVESTMENT_PLAN_REQUIRED
-                    message: investmentPlanId is required when creating a new investment account.
-
-                investmentNotFound:
-                  summary: Investment account not found
-                  value:
-                    code: INVESTMENT_NOT_FOUND
-                    message: The specified investment account does not exist.
-
-                amountRequired:
-                  summary: Amount required
-                  value:
-                    code: AMOUNT_REQUIRED
-                    message: amount is required for BUY and SELL instructions.
-
-                invalidAmount:
-                  summary: Invalid amount
-                  value:
-                    code: INVALID_AMOUNT
-                    message: amount must be greater than zero.
-
-
   /instructions/batch:
     post:
       operationId: submitInstructionBatch
@@ -302,6 +175,7 @@ paths:
             example:
               instructionBatchId: 600001
               instructionBatchBuyAmount: 75000000
+              instructionBatchSellAmount: 0
               instructions:
 
                 - instructionId: 100001
@@ -392,17 +266,7 @@ paths:
                 instructionBatchId: 100001
                 instructionBatchBuyAmount: 50000000
                 investmentPlanId: 300002
-                status: EXECUTED
-                trades:
-                  - quantity: 1000
-                    symbol: عیار
-                    price: 13300
-                    timestamp: '2026-09-27T09:30:00Z'
-
-                  - quantity: 500
-                    symbol: توان
-                    price: 13400
-                    timestamp: '2026-09-27T10:05:00Z'
+                status: COMPLETED
 
         '404':
           description: Instruction Batch not found
@@ -453,15 +317,7 @@ paths:
                 instructionType: BUY
                 amount: 50000000
                 investmentPlanId: 300002
-                status: PARTIALLY_EXECUTED
-                trades:
-                  - quantity: 1000
-                    price: 13300
-                    timestamp: '2026-09-27T09:30:00Z'
-
-                  - quantity: 500
-                    price: 13400
-                    timestamp: '2026-09-27T10:05:00Z'
+                status: COMPLETED
 
         '404':
           description: Instruction not found
@@ -599,7 +455,6 @@ paths:
                     amount: 13300000
                     timestamp: '2026-09-27T09:30:00Z'
                     trade:
-                      instructionId: 100001
                       isin: IRTKMOFD0001
                       symbol: عیار
                       symbolName: صندوق عیار مفید
@@ -1111,7 +966,6 @@ components:
       description: Trade details of a BUY or SELL transaction.
 
       required:
-        - instructionId
         - isin
         - symbol
         - symbolName
@@ -1119,11 +973,6 @@ components:
         - price
 
       properties:
-
-        instructionId:
-          type: integer
-          format: int64
-          description: Identifier of the instruction this trade was generated from.
 
         isin:
           type: string
@@ -1180,20 +1029,14 @@ components:
     InstructionStatus:
       type: string
       description: |
-        Terminal statuses: `EXECUTED`, `FAILED`, `CANCELLED`, `REJECTED`.
+        Terminal statuses: `COMPLETED`, `FAILED`, `REJECTED`.
 
         - `PENDING`: accepted and stored. Orders have not been generated
           yet.
-        - `EXECUTING`: orders generated and being executed, none has any
+        - `COMPLETED`: orders generated and being executed, none has any
           executed quantity.
-        - `PARTIALLY_EXECUTED`: some quantity executed, and at least one
-          order is not yet terminal.
-        - `EXECUTED`: all orders `EXECUTED`.
         - `FAILED`: processing failed before orders were generated, or all
           orders are terminal and at least one is `FAILED`.
-        - `CANCELLED`: cancelled before orders were generated, or all
-          orders are terminal, none is `FAILED` and at least one is
-          `CANCELLED`.
         - `REJECTED`: `POST /instructions/batch` only. The instruction was
           not accepted and was never stored. Never returned by
           `GET /instructions/{instructionId}`.
@@ -1202,11 +1045,8 @@ components:
         *Instruction status lifecycle* in the API description.
       enum:
         - PENDING
-        - EXECUTING
-        - PARTIALLY_EXECUTED
-        - EXECUTED
+        - COMPLETED
         - FAILED
-        - CANCELLED
         - REJECTED
 
     ErrorResponse:
