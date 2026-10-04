@@ -25,7 +25,7 @@ info:
 
     ## Asynchronous processing
 
-    Instructions are submitted through `POST /instructions/batch` and are
+    Instructions are submitted through `POST /instructions` and are
     executed asynchronously. A `PENDING` result means the individual
     instruction was accepted and stored; it does not mean execution has
     completed. No push mechanism (webhooks or callbacks) exists. Clients
@@ -44,7 +44,7 @@ info:
     | `FAILED` | The instruction could not be completed. | Yes |
 
     `REJECTED` is not an instruction lifecycle state. It is used only in
-    `POST /instructions/batch` results when an individual item is not accepted
+    `POST /instructions` results when an individual item is not accepted
     and therefore is never stored.
 
     Transitions:
@@ -64,7 +64,7 @@ info:
 
     ## Errors
 
-    - `POST /instructions/batch` returns **HTTP 400** only when the batch
+    - `POST /instructions` returns **HTTP 400** only when the batch
       request itself is malformed. Validation and business-rule errors for an
       individual instruction are returned in that item's batch result with
       status `REJECTED` and an `error.code`. Clients must branch on `code`,
@@ -84,7 +84,7 @@ info:
       500 (unexpected error) and 503 (temporarily unavailable).
       Their bodies are not guaranteed to follow `ErrorResponse`. Retry 429
       and 503 with backoff. After a 500 or a timeout on
-      `POST /instructions/batch`, the outcome of individual items may be
+      `POST /instructions`, the outcome of individual items may be
       unknown: reconcile accepted items with
       `GET /instructions/{instructionId}` (see *Retries and idempotency*).
     - `ErrorResponse` has no trace ID and no per-field details. When
@@ -98,7 +98,7 @@ info:
     after the instruction is terminal. `instructionBatchId` is a correlation
     identifier and is not the idempotency key.
 
-    After a timeout or a 5xx on `POST /instructions/batch`, the client may
+    After a timeout or a 5xx on `POST /instructions`, the client may
     resend the same batch with the same instruction payloads and the same
     `instructionId` values. For each item:
 
@@ -184,7 +184,7 @@ paths:
                 $ref: '#/components/schemas/InstructionBatchResponse'
 
               example:
-                instructionBatchId: 600001
+                instructionParentId: 600001
                 results:
 
                   - instructionId: 100001
@@ -210,7 +210,7 @@ paths:
                 code: INVALID_REQUEST
                 message: instructions must be a non-empty array.
 
-  /instructions/batch/{instructionBatchId}:
+  /instructions/batch/{instructionParentId}:
     get:
       operationId: getInstructionBatch
       summary: Get instruction batch status
@@ -221,7 +221,7 @@ paths:
 
       parameters:
 
-        - name: instructionBatchId
+        - name: instructionParentId
           in: path
           required: true
           description: Unique identifier of the instruction batch
@@ -240,7 +240,7 @@ paths:
                 $ref: '#/components/schemas/InstructionBatchDetailsResponse'
 
               example:
-                instructionBatchId: 600001
+                instructionParentId: 600001
                 status: COMPLETED
 
         '404':
@@ -251,8 +251,8 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
               example:
-                code: INSTRUCTION_BATCH_NOT_FOUND
-                message: Instruction batch with the specified instructionBatchId does not exist.
+                code: INSTRUCTION_PARENT_NOT_FOUND
+                message: Instruction parent with the specified instructionParentId does not exist.
 
   /instructions/{instructionId}:
     get:
@@ -590,34 +590,34 @@ components:
           $ref: '#/components/schemas/InstructionStatus'
 
 
-    InstructionBatchDetailsResponse:
+    InstructionParentDetailsResponse:
       type: object
       additionalProperties: false
 
       required:
-        - instructionBatchId
+        - instructionParentId
         - status
 
       properties:
 
-        instructionBatchId:
+        instructionParentId:
           type: integer
           format: int64
 
         status:
           $ref: '#/components/schemas/InstructionStatus'
 
-    InstructionBatchRequest:
+    InstructionParentRequest:
       type: object
       additionalProperties: false
 
       required:
-        - instructionBatchId
+        - instructionParentId
         - instructions
 
       properties:
 
-        instructionBatchId:
+        instructionParentId:
           type: integer
           format: int64
           minimum: 1
@@ -640,20 +640,20 @@ components:
             $ref: '#/components/schemas/InstructionRequest'
 
 
-    InstructionBatchResponse:
+    InstructionParentResponse:
       type: object
       additionalProperties: false
 
       required:
-        - instructionBatchId
+        - instructionParentId
         - results
 
       properties:
 
-        instructionBatchId:
+        instructionParentId:
           type: integer
           format: int64
-          description: instructionBatchId as submitted.
+          description: instructionParentId as submitted.
 
         results:
           type: array
@@ -661,10 +661,10 @@ components:
             One result per submitted instruction, in the same order as
             the request.
           items:
-            $ref: '#/components/schemas/InstructionBatchResult'
+            $ref: '#/components/schemas/InstructionParentResult'
 
 
-    InstructionBatchResult:
+    InstructionParentResult:
       type: object
       additionalProperties: false
       description: >
@@ -1082,4 +1082,4 @@ components:
         - INVALID_AMOUNT
         - INVALID_REQUEST
         - INSTRUCTION_NOT_FOUND
-        - INSTRUCTION_BATCH_NOT_FOUND
+        - INSTRUCTION_PARENT_NOT_FOUND
