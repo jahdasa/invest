@@ -128,7 +128,7 @@ servers:
 
 paths:
 
-  /instructions/batch:
+  /instructions:
     post:
       operationId: submitInstructionBatch
       summary: Submit a batch of investment instructions
@@ -155,7 +155,7 @@ paths:
               $ref: '#/components/schemas/InstructionBatchRequest'
 
             example:
-              instructionBatchId: 600001
+              instructionParentId: 600001
               instructions:
 
                 - instructionId: 100001
