@@ -157,6 +157,8 @@ paths:
 
             example:
               instructionBatchId: 600001
+              sumInvest: 50000000
+              sumDivest: 25000000
               instructions:
 
                 - instructionId: 100001
