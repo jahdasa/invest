@@ -1,0 +1,305 @@
+{
+  "info": {
+    "_postman_id": "8e48e098-6340-41a8-9b5c-050770dacb60",
+    "name": "vestapi",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "3794020"
+  },
+  "item": [
+    {
+      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600002",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "******",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600002",
+          "protocol": "https",
+          "host": [
+            "vestapi-sandbox",
+            "emofid",
+            "com"
+          ],
+          "path": [
+            "bimehma",
+            "api",
+            "v1",
+            "instructions",
+            "batch",
+            "600002"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/600002/10499909",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "******",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/600002/10499909",
+          "protocol": "https",
+          "host": [
+            "vestapi-sandbox",
+            "emofid",
+            "com"
+          ],
+          "path": [
+            "bimehma",
+            "api",
+            "v1",
+            "instructions",
+            "600002",
+            "10499909"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "******"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"instructionBatchId\": 600002,\n  \"instructionType\": \"INVEST\",\n  \"sumInvest\": 15594,\n  \"sumDivest\": 0,\n  \"instructions\": [\n   \n    {\n      \"instructionId\": 10499909,\n      \"investmentId\": 209999,\n      \"amount\": 8643,\n      \"investmentPlanId\": 100000\n    },\n    {\n      \"instructionId\": 105000012,\n      \"investmentId\": 210000,\n      \"amount\": 6951,\n      \"investmentPlanId\": 100000\n    }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch",
+          "protocol": "https",
+          "host": [
+            "vestapi-sandbox",
+            "emofid",
+            "com"
+          ],
+          "path": [
+            "bimehma",
+            "api",
+            "v1",
+            "instructions",
+            "batch"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/investments/11293505452/transactions",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "application/json"
+          },
+          {
+            "key": "accept-language",
+            "value": "en-US,en;q=0.9,fa;q=0.8"
+          },
+          {
+            "key": "authorization",
+            "value": "*****"
+          },
+          {
+            "key": "content-type",
+            "value": "application/json;charset=utf-8"
+          },
+          {
+            "key": "dnt",
+            "value": "1"
+          },
+          {
+            "key": "priority",
+            "value": "u=1, i"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Google Chrome\";v=\"153\", \"Not_A Brand\";v=\"8\", \"Chromium\";v=\"153\""
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\""
+          },
+          {
+            "key": "sec-fetch-dest",
+            "value": "empty"
+          },
+          {
+            "key": "sec-fetch-mode",
+            "value": "cors"
+          },
+          {
+            "key": "sec-fetch-site",
+            "value": "same-site"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "text"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/investments/11293505452/transactions?from=2026-01-01T00:00:00&to=2026-10-08T00:00:00&page=0&pageSize=1",
+          "protocol": "https",
+          "host": [
+            "vestapi-sandbox",
+            "emofid",
+            "com"
+          ],
+          "path": [
+            "bimehma",
+            "api",
+            "v1",
+            "investments",
+            "11293505452",
+            "transactions"
+          ],
+          "query": [
+            {
+              "key": "from",
+              "value": "2026-01-01T00:00:00"
+            },
+            {
+              "key": "to",
+              "value": "2026-10-08T00:00:00"
+            },
+            {
+              "key": "page",
+              "value": "0"
+            },
+            {
+              "key": "pageSize",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "https://vestapi-sandbox.emofid.com/backoffice/api/v1/investments/11293505451",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "application/json"
+          },
+          {
+            "key": "accept-language",
+            "value": "en-US,en;q=0.9,fa;q=0.8"
+          },
+          {
+            "key": "authorization",
+            "value": "******"
+          },
+          {
+            "key": "content-type",
+            "value": "application/json;charset=utf-8"
+          },
+          {
+            "key": "origin",
+            "value": "https://ammostage.emofid.com"
+          },
+          {
+            "key": "priority",
+            "value": "u=1, i"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Google Chrome\";v=\"153\", \"Not_A Brand\";v=\"8\", \"Chromium\";v=\"153\""
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?0"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Windows\""
+          },
+          {
+            "key": "sec-fetch-dest",
+            "value": "empty"
+          },
+          {
+            "key": "sec-fetch-mode",
+            "value": "cors"
+          },
+          {
+            "key": "user-agent",
+            "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "text"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://vestapi-sandbox.emofid.com/backoffice/api/v1/investments/11293505451",
+          "protocol": "https",
+          "host": [
+            "vestapi-sandbox",
+            "emofid",
+            "com"
+          ],
+          "path": [
+            "backoffice",
+            "api",
+            "v1",
+            "investments",
+            "11293505451"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
