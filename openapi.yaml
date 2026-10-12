@@ -17,12 +17,12 @@ info:
     - **Money identity.** For an account, `investmentValue`
       equals `cashBalance` plus the sum of `quantity × lastMarketPrice` over
       its assets.
-    - **Timestamps.** All `date-time` values, in requests and responses,
-      are ISO 8601 in **UTC** (suffix `Z`). They are not in Tehran local
-      time, even though the market operates on Tehran time.
+    - **Timestamps.** Response `date-time` values are ISO 8601 in **UTC**
+      (suffix `Z`). Transaction range query parameters use the local
+      date-time form `YYYY-MM-DDTHH:mm:ss`, without a UTC offset.
     - **Identifiers.** `instructionBatchId` groups a batch, and each
       `instructionId` is unique across all clients.
-      `investmentId` is assigned by the client when the account is created.
+      `portfolioId` identifies the portfolio affected by an instruction.
 
     ## Asynchronous processing
 
@@ -30,7 +30,8 @@ info:
     executed asynchronously. A `PENDING` result means the individual
     instruction was accepted and stored; it does not mean execution has
     completed. No push mechanism (webhooks or callbacks) exists. Clients
-    track each accepted instruction with `GET /instructions/{instructionId}`
+    track each accepted instruction with
+    `GET /instructions/{instructionBatchId}/{instructionId}`
     until it reaches a terminal status (`COMPLETED`,
     `PARTIALLY_COMPLETED`, or `FAILED`).
 
@@ -87,10 +88,11 @@ info:
       and 503 with backoff. After a 500 or a timeout on
       `POST /instructions/batch`, the outcome of individual items may be
       unknown: reconcile accepted items with
-      `GET /instructions/{instructionId}` (see *Retries and idempotency*).
+      `GET /instructions/{instructionBatchId}/{instructionId}` (see
+      *Retries and idempotency*).
     - `ErrorResponse` has no trace ID and no per-field details. When
       reporting a problem, include the `code`, the request timestamp (UTC)
-      and the related `instructionId` or `investmentId`.
+      and the related `instructionId`, `portfolioId`, or `investmentId`.
 
     ## Retries and idempotency
 
@@ -106,10 +108,11 @@ info:
     - `PENDING`: the instruction was accepted by this submission and stored.
     - `REJECTED` with `DUPLICATE_INSTRUCTION`: an instruction with this ID
       already exists. The server does not check whether the payload is the
-      same. Call `GET /instructions/{instructionId}`: if the returned details
-      match the submitted item, an earlier attempt succeeded and nothing more
-      is needed; otherwise the ID collides with another instruction and a new
-      `instructionId` must be used.
+      same. Call
+      `GET /instructions/{instructionBatchId}/{instructionId}`: if the
+      returned details match the submitted item, an earlier attempt succeeded
+      and nothing more is needed; otherwise the ID collides with another
+      instruction and a new `instructionId` must be used.
 
     ## Known limitations of this version
 
@@ -117,15 +120,17 @@ info:
     - No failure reason is exposed for `FAILED` instructions.
     - Instruction endpoints expose only instruction-level status; generated
       orders, trades, and per-asset execution details are intentionally not returned.
-    - The investment transactions endpoint is not paginated.
     - There is no endpoint that lists the instructions of an investment
       account. Clients must keep the `instructionId`s they submit.
 
 servers:
-  - url: https://vestapi.emofid.com/api/v1
+  - url: https://vestapi.emofid.com/bimehma/api/v1
     description: Production
-  - url: https://vestapi-sandbox.emofid.com/api/v1
+  - url: https://vestapi-sandbox.emofid.com/bimehma/api/v1
     description: Sandbox
+
+security:
+  - bearerAuth: []
 
 paths:
 
@@ -134,7 +139,8 @@ paths:
       operationId: submitInstructionBatch
       summary: Submit a batch of investment instructions
       description: |
-        Submits one or more INVEST or DIVEST instructions in a single request.
+        Submits one or more instructions of the batch's `instructionType` in
+        a single request. `sumInvest` and `sumDivest` provide the batch totals.
         Each instruction is validated and processed independently; the failure
         or rejection of one instruction does not prevent the others from being
         accepted. A batch containing a single instruction is valid. See
@@ -156,21 +162,21 @@ paths:
               $ref: '#/components/schemas/InstructionBatchRequest'
 
             example:
-              instructionBatchId: 600001
-              sumInvest: 50000000
-              sumDivest: 25000000
+              instructionBatchId: 600003
+              instructionType: INVEST
+              sumInvest: 15594
+              sumDivest: 0
               instructions:
 
-                - instructionId: 100001
-                  investmentId: 200001
-                  instructionType: INVEST
-                  amount: 50000000
-                  investmentPlanId: 300002
+                - instructionId: 10499909
+                  portfolioId: 209999
+                  amount: 8643
+                  investmentPlanId: 100000
 
-                - instructionId: 100002
-                  investmentId: 200001
-                  instructionType: DIVEST
-                  amount: 25000000
+                - instructionId: 105000012
+                  portfolioId: 210000
+                  amount: 6951
+                  investmentPlanId: 100000
 
       responses:
 
@@ -179,8 +185,8 @@ paths:
             Batch processed. Each instruction was validated and stored
             independently; check status on each result. A PENDING result
             means the instruction was stored and can be tracked with
-            GET /instructions/{instructionId}. A REJECTED result means it was
-            not stored; see its error.
+            GET /instructions/{instructionBatchId}/{instructionId}. A REJECTED
+            result means it was not stored; see its error.
           content:
             application/json:
               schema:
@@ -257,7 +263,7 @@ paths:
                 code: INSTRUCTION_BATCH_NOT_FOUND
                 message: Instruction batch with the specified instructionBatchId does not exist.
 
-  /instructions/{instructionId}:
+  /instructions/{instructionBatchId}/{instructionId}:
     get:
       operationId: getInstruction
       summary: Get instruction details and execution status
@@ -267,6 +273,15 @@ paths:
         returned. An invalid instructionId returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
+
+        - name: instructionBatchId
+          in: path
+          required: true
+          description: Identifier of the batch containing the instruction
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
 
         - name: instructionId
           in: path
@@ -288,7 +303,7 @@ paths:
 
               example:
                 instructionId: 100001
-                investmentId: 200001
+                portfolioId: 200001
                 instructionType: INVEST
                 amount: 50000000
                 investmentPlanId: 300002
@@ -306,21 +321,21 @@ paths:
                 message: Instruction with the specified instructionId does not exist.
 
 
-  /investments/{investmentId}:
+  /portfolios/{portfolioId}/details:
     get:
-      operationId: getInvestment
-      summary: Get investment account details
+      operationId: getPortfolioDetails
+      summary: Get portfolio details
       description: >
-        Returns the investment account's default plan, cash balance,
-        and current asset holdings. All monetary values are in Rial.
-        An invalid investmentId returns HTTP 400 with INVALID_REQUEST.
+        Returns the portfolio's default plan, cash balance, and current asset
+        holdings. All monetary values are in Rial. An invalid portfolioId
+        returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
 
-        - name: investmentId
+        - name: portfolioId
           in: path
           required: true
-          description: Unique identifier of the investment account
+          description: Unique identifier of the portfolio
           schema:
             type: integer
             format: int64
@@ -329,14 +344,14 @@ paths:
       responses:
 
         '200':
-          description: Investment account details
+          description: Portfolio details
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InvestmentDetailsResponse'
+                $ref: '#/components/schemas/PortfolioDetailsResponse'
 
               example:
-                investmentId: 200001
+                portfolioId: 112910912784151
                 investmentPlanId: 300002
                 cashBalance: 5000000
                 investmentValue: 45100000
@@ -353,15 +368,11 @@ paths:
                 timestamp: '2026-09-27T10:15:00Z'
 
         '404':
-          description: Investment account not found
+          description: Portfolio not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
-              example:
-                code: INVESTMENT_NOT_FOUND
-                message: The specified investment account does not exist.
 
 
   /investments/{investmentId}/transactions:
@@ -371,9 +382,9 @@ paths:
       description: >
         Returns all transactions (deposits, withdrawals, buys and sells) of
         the investment account between the from and to timestamps (UTC),
-        sorted by timestamp ascending. The response is not paginated.
-        A missing or malformed from or to, from later than to, or an
-        invalid investmentId returns HTTP 400 with INVALID_REQUEST.
+        sorted by timestamp ascending and paginated. A missing or malformed
+        from or to, from later than to, or an invalid investmentId returns
+        HTTP 400 with INVALID_REQUEST.
 
       parameters:
 
@@ -390,21 +401,41 @@ paths:
           in: query
           required: true
           description: >
-            Start of the date range (inclusive), in UTC. Must not be later
-            than to.
+            Start of the date range (inclusive), as an ISO 8601 local
+            date-time. Must not be later than to.
           schema:
             type: string
-            format: date-time
+            example: '2026-01-01T00:00:00'
 
         - name: to
           in: query
           required: true
           description: >
-            End of the date range (inclusive), in UTC. Must not be earlier
-            than from.
+            End of the date range (inclusive), as an ISO 8601 local date-time.
+            Must not be earlier than from.
           schema:
             type: string
-            format: date-time
+            example: '2026-10-08T00:00:00'
+
+        - name: page
+          in: query
+          required: true
+          description: Zero-based page index
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            example: 0
+
+        - name: pageSize
+          in: query
+          required: true
+          description: Number of transactions to return per page
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            example: 1
 
       responses:
 
@@ -453,7 +484,92 @@ paths:
                 message: The specified investment account does not exist.
 
 
+  /portfolio-transaction/{portfolioId}/transactions:
+    get:
+      operationId: getPortfolioTransactions
+      summary: Get transactions for a portfolio within a date range
+      description: >
+        Returns the requested page of portfolio transactions between the from
+        and to date-times, sorted by timestamp ascending. A missing or malformed
+        parameter, from later than to, or an invalid portfolioId returns HTTP
+        400 with INVALID_REQUEST.
+
+      parameters:
+
+        - name: portfolioId
+          in: path
+          required: true
+          description: Unique identifier of the portfolio
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+        - name: from
+          in: query
+          required: true
+          description: >
+            Start of the date range (inclusive), as an ISO 8601 local
+            date-time. Must not be later than to.
+          schema:
+            type: string
+            example: '2026-10-01T00:00:00'
+
+        - name: to
+          in: query
+          required: true
+          description: >
+            End of the date range (inclusive), as an ISO 8601 local date-time.
+            Must not be earlier than from.
+          schema:
+            type: string
+            example: '2026-10-12T23:59:59'
+
+        - name: page
+          in: query
+          required: true
+          description: Zero-based page index
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            example: 0
+
+        - name: pageSize
+          in: query
+          required: true
+          description: Number of transactions to return per page
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            example: 10
+
+      responses:
+
+        '200':
+          description: Portfolio transactions within the specified date range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioTransactionHistoryResponse'
+
+        '404':
+          description: Portfolio not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
 components:
+
+  securitySchemes:
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
 
   schemas:
 
@@ -463,8 +579,8 @@ components:
 
       required:
         - instructionId
-        - investmentId
-        - instructionType
+        - portfolioId
+        - amount
 
       properties:
 
@@ -480,39 +596,33 @@ components:
             existing instructionId is not allowed and returns
             DUPLICATE_INSTRUCTION, whatever the payload. After a
             DUPLICATE_INSTRUCTION on a retry, call
-            GET /instructions/{instructionId} to check whether the
-            original request succeeded.
+            GET /instructions/{instructionBatchId}/{instructionId} to check
+            whether the original request succeeded.
 
-        investmentId:
+        portfolioId:
           type: integer
           format: int64
           minimum: 1
           description: >
-            Identifier of the investment account.
+            Identifier of the portfolio.
 
-            For DIVEST instructions, the investment account
-            must already exist.
+            For DIVEST instructions, the portfolio must already exist.
 
-            For INVEST instructions, a new investment account is created with
-            this identifier if it does not exist; investmentPlanId is then
-            required.
-
-        instructionType:
-          $ref: '#/components/schemas/InstructionType'
+            For INVEST instructions, a new portfolio is created with this
+            identifier if it does not exist; investmentPlanId is then required.
 
         amount:
           type: integer
-          nullable: true
           format: int64
           minimum: 1
           description: >
             Monetary amount of the instruction, in Rial.
 
-            INVEST (required): cash deposit to record in the investment account.
+            INVEST: cash deposit to record in the portfolio.
 
-            DIVEST (required): withdrawal/debt to record in the investment account. It must not exceed
-            the value available to sell, otherwise the instruction becomes
-            FAILED.
+            DIVEST: withdrawal/debt to record in the portfolio. It must not
+            exceed the value available to sell, otherwise the instruction
+            becomes FAILED.
 
 
         investmentPlanId:
@@ -521,32 +631,15 @@ components:
           format: int64
           minimum: 1
           description: >
-            Default investment plan of the investment account.
+            Default investment plan of the portfolio.
 
-            When provided, this plan becomes the default plan of the
-            investment account.
+            When provided, this plan becomes the default plan of the portfolio.
 
-            When creating a new investment account, investmentPlanId is required.
+            When creating a new portfolio, investmentPlanId is required.
 
-            For an existing investment account, if investmentPlanId is omitted,
-            the account's current default plan is used. If no default plan exists,
+            For an existing portfolio, if investmentPlanId is omitted, the
+            portfolio's current default plan is used. If no default plan exists,
             INVEST is rejected with INVESTMENT_PLAN_REQUIRED.
-
-      oneOf:
-
-        - properties:
-            instructionType:
-              enum:
-                - INVEST
-          required:
-            - amount
-
-        - properties:
-            instructionType:
-              enum:
-                - DIVEST
-          required:
-            - amount
 
 
     InstructionDetailsResponse:
@@ -559,7 +652,7 @@ components:
 
       required:
         - instructionId
-        - investmentId
+        - portfolioId
         - instructionType
         - status
 
@@ -569,7 +662,7 @@ components:
           type: integer
           format: int64
 
-        investmentId:
+        portfolioId:
           type: integer
           format: int64
 
@@ -616,6 +709,9 @@ components:
 
       required:
         - instructionBatchId
+        - instructionType
+        - sumInvest
+        - sumDivest
         - instructions
 
       properties:
@@ -632,6 +728,23 @@ components:
             still the idempotency key, so resubmitting the same batch
             (whether under the same or a different instructionBatchId) is
             safe.
+
+        instructionType:
+          $ref: '#/components/schemas/InstructionType'
+
+        sumInvest:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Total INVEST amount in the batch. It is zero for a DIVEST batch.
+
+        sumDivest:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Total DIVEST amount in the batch. It is zero for an INVEST batch.
 
         instructions:
           type: array
@@ -674,8 +787,8 @@ components:
         Result of submitting one instruction from the batch. status is
         always PENDING or REJECTED here: PENDING means the instruction was
         accepted and stored and can be tracked with
-        GET /instructions/{instructionId}; REJECTED means it was not stored,
-        and error is present with the reason.
+        GET /instructions/{instructionBatchId}/{instructionId}; REJECTED means
+        it was not stored, and error is present with the reason.
 
       required:
         - instructionId
@@ -701,6 +814,9 @@ components:
               enum:
                 - PENDING
           not:
+            properties:
+              error:
+                $ref: '#/components/schemas/ErrorResponse'
             required:
               - error
 
@@ -708,16 +824,18 @@ components:
             status:
               enum:
                 - REJECTED
+            error:
+              $ref: '#/components/schemas/ErrorResponse'
           required:
             - error
 
 
-    InvestmentDetailsResponse:
+    PortfolioDetailsResponse:
       type: object
       additionalProperties: false
 
       required:
-        - investmentId
+        - portfolioId
         - investmentPlanId
         - cashBalance
         - investmentValue
@@ -726,7 +844,7 @@ components:
 
       properties:
 
-        investmentId:
+        portfolioId:
           type: integer
           format: int64
 
@@ -735,7 +853,7 @@ components:
           nullable: true
           format: int64
           description: >
-            Default investment plan of the investment account.
+            Default investment plan of the portfolio.
 
             May be null if no plan has been assigned. Accounts created
             through this API always have a default plan, because
@@ -748,23 +866,23 @@ components:
           format: int64
           minimum: 0
           description: >
-            Cash balance available in the investment account, in Rial.
+            Cash balance available in the portfolio, in Rial.
 
         investmentValue:
           type: integer
           format: int64
           minimum: 0
           description: >
-            Total value of the investment account, in Rial. Equal to the cash
+            Total value of the portfolio, in Rial. Equal to the cash
             balance plus the market value (quantity × lastMarketPrice) of all
             asset holdings.
 
         assets:
           type: array
           description: >
-            Current asset holdings of the investment account.
+            Current asset holdings of the portfolio.
           items:
-            $ref: '#/components/schemas/InvestmentAsset'
+            $ref: '#/components/schemas/PortfolioAsset'
 
         timestamp:
           type: string
@@ -773,7 +891,7 @@ components:
             Date and time this valuation was generated, in UTC.
 
 
-    InvestmentAsset:
+    PortfolioAsset:
       type: object
       additionalProperties: false
 
@@ -810,35 +928,6 @@ components:
             Last known market price per unit of the symbol, in Rial.
 
 
-    Trade:
-      type: object
-      additionalProperties: false
-
-      required:
-        - quantity
-        - price
-        - timestamp
-
-      properties:
-
-        quantity:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Number of units traded.
-
-        price:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Price per unit for this trade, in Rial.
-
-        timestamp:
-          type: string
-          format: date-time
-          description: Date and time the trade was executed, in UTC.
-
-
     InvestmentTransactionHistoryResponse:
       type: object
       additionalProperties: false
@@ -871,15 +960,48 @@ components:
             Transactions of the investment account within the requested
             date range, sorted by timestamp ascending.
           items:
-            $ref: '#/components/schemas/InvestmentTransaction'
+            $ref: '#/components/schemas/Transaction'
 
 
-    InvestmentTransaction:
+    PortfolioTransactionHistoryResponse:
+      type: object
+      additionalProperties: false
+
+      required:
+        - portfolioId
+        - from
+        - to
+        - transactions
+
+      properties:
+
+        portfolioId:
+          type: integer
+          format: int64
+
+        from:
+          type: string
+          description: Start of the requested date range (inclusive).
+
+        to:
+          type: string
+          description: End of the requested date range (inclusive).
+
+        transactions:
+          type: array
+          description: >
+            Transactions of the portfolio within the requested date range,
+            sorted by timestamp ascending.
+          items:
+            $ref: '#/components/schemas/Transaction'
+
+
+    Transaction:
       type: object
       additionalProperties: false
       description: >
-        A single transaction of an investment account. trade is present
-        only when type is BUY or SELL, and absent for DEPOSIT and WITHDRAW.
+        A single investment or portfolio transaction. trade is present only
+        when type is BUY or SELL, and absent for DEPOSIT and WITHDRAW.
 
       required:
         - transactionId
@@ -921,6 +1043,8 @@ components:
               enum:
                 - BUY
                 - SELL
+            trade:
+              $ref: '#/components/schemas/TransactionTrade'
           required:
             - trade
 
@@ -930,6 +1054,9 @@ components:
                 - DEPOSIT
                 - WITHDRAW
           not:
+            properties:
+              trade:
+                $ref: '#/components/schemas/TransactionTrade'
             required:
               - trade
 
