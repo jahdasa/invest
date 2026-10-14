@@ -15,15 +15,20 @@
           "bearer": [
             {
               "key": "token",
-              "value": "{{json_web_token_13j1}}",
+              "value": "",
               "type": "string"
             }
           ]
         },
         "method": "GET",
-        "header": [],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer 1111"
+          }
+        ],
         "url": {
-          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600003",
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600004",
           "protocol": "https",
           "host": [
             "vestapi-sandbox",
@@ -36,7 +41,7 @@
             "v1",
             "instructions",
             "batch",
-            "600003"
+            "600004"
           ]
         }
       },
@@ -216,12 +221,12 @@
           },
           {
             "key": "Authorization",
-            "value": "Bearer ssss"
+            "value": "Bearer 11"
           }
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"instructionBatchId\": 600003,\n  \"instructionType\": \"INVEST\",\n  \"sumInvest\": 15594,\n  \"sumDivest\": 0,\n  \"instructions\": [\n   \n    {\n      \"instructionId\": 10499909,\n      \"portfolioId\": 209999,\n      \"amount\": 8643,\n      \"investmentPlanId\": 100000\n    },\n    {\n      \"instructionId\": 105000012,\n      \"portfolioId\": 210000,\n      \"amount\": 6951,\n      \"investmentPlanId\": 100000\n    }\n  ]\n}",
+          "raw": "{\n  \"instructionBatchId\": 600004,\n  \"instructionType\": \"INVEST\",\n  \"sumInvest\": 15594,\n  \"sumDivest\": 0,\n  \"instructions\": [\n   \n    {\n      \"instructionId\": 10499909,\n      \"portfolioId\": 209999,\n      \"amount\": 8643,\n      \"investmentPlanId\": 100000\n    },\n    {\n      \"instructionId\": 105000012,\n      \"portfolioId\": 210000,\n      \"amount\": 6951,\n      \"investmentPlanId\": 100000\n    }\n  ]\n}",
           "options": {
             "raw": {
               "language": "json"
