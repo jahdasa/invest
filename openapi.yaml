@@ -59,11 +59,11 @@ info:
     an individual instruction. Batch-level status is returned by
     `GET /instructions/batch/{instructionBatchId}`.
 
-    ## Plans
+    ## Models
 
-    A plan defines a set of assets and their target weights. This version
-    of the API has no plan-discovery endpoint. A plan ID in a request must
-    refer to an existing plan, otherwise `INVESTMENT_PLAN_NOT_FOUND` is returned.
+    A model defines a set of assets and their target weights. This version
+    of the API has no model-discovery endpoint. A model ID in a request must
+    refer to an existing model, otherwise `INVESTMENT_PLAN_NOT_FOUND` is returned.
 
     ## Errors
 
@@ -178,12 +178,12 @@ paths:
                 - instructionId: 10499909
                   portfolioId: 209999
                   amount: 8643
-                  investmentPlanId: 100000
+                  modelId: 100000
 
                 - instructionId: 105000012
                   portfolioId: 210000
                   amount: 6951
-                  investmentPlanId: 100000
+                  modelId: 100000
 
       responses:
 
@@ -374,7 +374,7 @@ paths:
       operationId: getPortfolioDetails
       summary: Get portfolio details
       description: >
-        Returns the portfolio's default plan, cash balance, and current asset
+        Returns the portfolio's default model, cash balance, and current asset
         holdings. All monetary values are in Rial. An invalid portfolioId
         returns HTTP 400 with INVALID_REQUEST.
 
@@ -400,7 +400,7 @@ paths:
 
               example:
                 portfolioId: 112910912784151
-                planId: 300002
+                modelId: 300002
                 cashBalance: 5000000
                 value: 45100000
                 assets:
@@ -644,7 +644,7 @@ components:
         - instructionId
         - portfolioId
         - amount
-        - investmentPlanId
+        - modelId
 
       properties:
 
@@ -671,7 +671,7 @@ components:
             For DIVEST instructions, the portfolio must already exist.
 
             For INVEST instructions, a new portfolio is created with this
-            identifier if it does not exist; investmentPlanId is then required.
+            identifier if it does not exist; modelId is then required.
 
         amount:
           type: integer
@@ -686,11 +686,11 @@ components:
             becomes FAILED.
 
 
-        investmentPlanId:
+        modelId:
           type: integer
           format: int64
           description: >
-            Default investment plan of the portfolio.
+            Default investment model of the portfolio.
             This field is required by the backoffice request contract.
 
 
@@ -845,11 +845,11 @@ components:
           type: integer
           format: int64
 
-        planId:
+        modelId:
           type: integer
           format: int64
           description: >
-            Default investment plan of the portfolio.
+            Default investment model of the portfolio.
 
         cashBalance:
           type: integer
@@ -1094,11 +1094,11 @@ components:
           See *Retries and idempotency*. A reused `instructionBatchId` is also
           rejected, but its specific error code must be confirmed by the API
           implementation.
-        - `INVESTMENT_PLAN_NOT_FOUND` (400): `investmentPlanId` does not
-          refer to an existing plan.
-        - `INVESTMENT_PLAN_REQUIRED` (400): no plan could be resolved,
+        - `INVESTMENT_PLAN_NOT_FOUND` (400): `modelId` does not
+          refer to an existing model.
+        - `INVESTMENT_PLAN_REQUIRED` (400): no model could be resolved,
           either because an INVEST creates a new account without
-          `investmentPlanId`, or because the account has no default plan.
+          `modelId`, or because the account has no default model.
         - `INVESTMENT_NOT_FOUND` (400 on POST, 404 on GET): the investment
           account does not exist.
         - `INSTRUCTION_NOT_FOUND` (404): the instruction does not exist.
