@@ -27,29 +27,37 @@ info:
     Instructions are submitted through `POST /instructions/batch` and are
     executed asynchronously. A valid batch receives HTTP 201 with no response
     body; it does not mean execution has completed. No push mechanism
-    (webhooks or callbacks) exists. Clients track each instruction with
-    `GET /instructions/{instructionBatchId}/{instructionId}`
-    until it reaches a terminal status (`COMPLETED`,
-    `PARTIALLY_COMPLETED`, or `FAILED`).
+    (webhooks or callbacks) exists. Clients can track batch-level status with
+    `GET /instructions/batch/{instructionBatchId}` and instruction-level status
+    with `GET /instructions/{instructionBatchId}/{instructionId}`.
+    `PARTIALLY_COMPLETED` applies only to the batch level. An individual
+    instruction reaches `COMPLETED` or `FAILED`; while processing, it may be
+    `PENDING` or `EXECUTING`.
 
     ## Instruction status lifecycle
 
-    | Status | Meaning | Terminal |
+    `PARTIALLY_COMPLETED` is a batch-level status only; it is not an
+    instruction-level status.
+
+    | Instruction status | Meaning | Terminal |
     |---|---|---|
     | `PENDING` | Accepted and stored; processing has not started yet. | No |
     | `EXECUTING` | Processing has started. | No |
-    | `PARTIALLY_COMPLETED` | Processing has finished, but only part of the instruction was completed. No further execution will occur for this instruction. | Yes |
     | `COMPLETED` | The financial effect of the instruction was recorded successfully; this does not imply market execution. | Yes |
-    | `FAILED` | The instruction could not be completed. | Yes |
+    | `FAILED` | The instruction could not be completed. The failure reason is available through the instruction's error details. | Yes |
 
-    Transitions:
+    Instruction transitions:
 
     | From | To | Trigger |
     |---|---|---|
     | `PENDING` | `EXECUTING` | Processing starts. |
-    | `EXECUTING` | `COMPLETED` | Processing finishes and the instruction is completed in full. |
-    | `EXECUTING` | `PARTIALLY_COMPLETED` | Processing finishes after only part of the instruction could be completed; no further execution will occur. |
+    | `EXECUTING` | `COMPLETED` | Processing finishes and the instruction is completed. |
     | `PENDING`, `EXECUTING` | `FAILED` | A processing or business-rule failure prevents completion. |
+
+    At batch level, `PARTIALLY_COMPLETED` means that some instructions in the
+    batch completed successfully while others did not. It does not apply to
+    an individual instruction. Batch-level status is returned by
+    `GET /instructions/batch/{instructionBatchId}`.
 
     ## Plans
 
@@ -59,9 +67,10 @@ info:
 
     ## Errors
 
-    - `POST /instructions/batch` returns **HTTP 400** only when the batch
+    - `POST /instructions/batch` returns **HTTP 400** when the batch
       request itself is malformed. Processing errors for an individual
-      instruction are exposed by the instruction lookup response.
+      instruction are exposed by the instruction lookup response. Reuse of
+      an existing instruction or batch identifier is not allowed.
     - JSON Schema violations map to specific codes where one exists:
       a missing `amount` for INVEST or DIVEST → `AMOUNT_REQUIRED`;
       an `amount` below 1 → `INVALID_AMOUNT`. Every other
@@ -87,21 +96,37 @@ info:
 
     ## Retries and idempotency
 
-    `instructionId` is the idempotency key for each item in a batch. It must
-    be **globally unique across all clients** and must never be reused, even
-    after the instruction is terminal. `instructionBatchId` is a correlation
-    identifier and is not the idempotency key.
+    Both `instructionBatchId` and `instructionId` must be unique and must
+    not be reused for a new request. `instructionId` must be globally unique
+    across all clients and must never be reused, even after the instruction
+    is terminal. Reusing an existing `instructionId` is rejected with
+    `DUPLICATE_INSTRUCTION`. Reusing an existing `instructionBatchId` is also
+    not allowed; the specific error code for a duplicate batch ID is not
+    specified in this document.
 
-    After a timeout or a 5xx on `POST /instructions/batch`, call
-    `GET /instructions/{instructionBatchId}/{instructionId}` to determine
-    whether each submitted instruction was stored before retrying.
+    After a timeout or a 5xx on `POST /instructions/batch`, do not blindly
+    submit the same batch again with the same identifiers. Reconcile the
+    outcome by calling `GET /instructions/batch/{instructionBatchId}` and
+    `GET /instructions/{instructionBatchId}/{instructionId}` for the submitted
+    identifiers before creating a new request with new unique identifiers.
 
-    ## Known limitations of this version
+    ## Cancellation and known limitations
 
+    - There is currently no public API to cancel or edit a submitted batch.
+      A batch may remain `EXECUTING` while internal processing is in progress.
+      The internal team may be able to reject it through an internal process,
+      but this is not a client-accessible cancellation operation.
     - Instruction endpoints expose only instruction-level status; generated
       orders, trades, and per-asset execution details are intentionally not returned.
     - There is no endpoint that lists the instructions of an investment
       account. Clients must keep the `instructionId`s they submit.
+    - The maximum recommended/accepted number of instructions per batch has
+      not yet been agreed and is intentionally left unspecified.
+    - `GET /portfolios/{portfolioId}/net-market-value` returns the current
+      market-value breakdown (`marketValue`, `cashValue`, `debt`, and
+      `netBookValue`) and can be consulted before initiating a withdrawal.
+      The response is a valuation snapshot; it does not reserve funds or
+      guarantee that a later DIVEST instruction will succeed.
 
 servers:
   - url: https://vestapi.emofid.com/bimehma/api/v1
@@ -123,8 +148,11 @@ paths:
         a single request. `sumInvest` and `sumDivest` provide the batch totals.
         Each instruction is validated and processed independently; the failure
         or rejection of one instruction does not prevent the others from being
-        accepted. A batch containing a single instruction is valid. See
-        *Errors* and *Retries and idempotency* for submission and retry rules.
+        accepted. A batch containing a single instruction is valid.
+        `instructionBatchId` and every `instructionId` must be unique and must
+        not be reused. `PARTIALLY_COMPLETED` is meaningful only for the batch,
+        not for an individual instruction. See *Errors* and
+        *Retries and idempotency* for submission and retry rules.
 
         A valid batch is accepted with HTTP status 201 and no response body.
 
@@ -695,8 +723,11 @@ components:
       type: object
       description: >
         Submitted instruction fields plus the current instruction-level status.
-        This schema intentionally does not expose generated orders, trades, or
-        per-asset execution details.
+        Instruction status is `PENDING`, `EXECUTING`, `COMPLETED`, or `FAILED`;
+        `PARTIALLY_COMPLETED` is a batch-level status only. The `errors` array
+        exposes failure details for an instruction when available. This schema
+        intentionally does not expose generated orders, trades, or per-asset
+        execution details.
       properties:
         id:
           type: integer
@@ -1060,7 +1091,9 @@ components:
         - `AMOUNT_REQUIRED` (400): `amount` is missing for INVEST or DIVEST.
         - `INVALID_AMOUNT` (400): `amount` is below 1.
         - `DUPLICATE_INSTRUCTION` (400): `instructionId` already exists.
-          See *Retries and idempotency*.
+          See *Retries and idempotency*. A reused `instructionBatchId` is also
+          rejected, but its specific error code must be confirmed by the API
+          implementation.
         - `INVESTMENT_PLAN_NOT_FOUND` (400): `investmentPlanId` does not
           refer to an existing plan.
         - `INVESTMENT_PLAN_REQUIRED` (400): no plan could be resolved,
