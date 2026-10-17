@@ -226,7 +226,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"instructionBatchId\": 600004,\n  \"instructionType\": \"INVEST\",\n  \"sumInvest\": 15594,\n  \"sumDivest\": 0,\n  \"instructions\": [\n   \n    {\n      \"instructionId\": 10499909,\n      \"portfolioId\": 209999,\n      \"amount\": 8643,\n      \"investmentPlanId\": 100000\n    },\n    {\n      \"instructionId\": 105000012,\n      \"portfolioId\": 210000,\n      \"amount\": 6951,\n      \"investmentPlanId\": 100000\n    }\n  ]\n}",
+          "raw": "{\n  \"instructionBatchId\": 600004,\n  \"instructionType\": \"INVEST\",\n  \"sumInvest\": 15594,\n  \"sumDivest\": 0,\n  \"instructions\": [\n   \n    {\n      \"instructionId\": 10499909,\n      \"portfolioId\": 209999,\n      \"amount\": 8643,\n      \"modelId\": 100000\n    },\n    {\n      \"instructionId\": 105000012,\n      \"portfolioId\": 210000,\n      \"amount\": 6951,\n      \"modelId\": 100000\n    }\n  ]\n}",
           "options": {
             "raw": {
               "language": "json"
