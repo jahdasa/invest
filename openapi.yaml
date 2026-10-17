@@ -12,14 +12,12 @@ info:
 
     - **Monetary unit.** Every monetary value in this API (`amount`,
       `price`, `lastMarketPrice`, `cashBalance`,
-      `investmentValue`) is an integer number of **Iranian Rial (IRR)**.
+      `value`) is an integer number of **Iranian Rial (IRR)**.
       Toman is never used.
-    - **Money identity.** For an account, `investmentValue`
+    - **Money identity.** For an account, `value`
       equals `cashBalance` plus the sum of `quantity × lastMarketPrice` over
       its assets.
-    - **Timestamps.** Response `date-time` values are ISO 8601 in **UTC**
-      (suffix `Z`). Transaction range query parameters use the local
-      date-time form `YYYY-MM-DDTHH:mm:ss`, without a UTC offset.
+    - **Timestamps.** `date-time` values are ISO 8601 in **UTC** (suffix `Z`).
     - **Identifiers.** `instructionBatchId` groups a batch, and each
       `instructionId` is unique across all clients.
       `portfolioId` identifies the portfolio affected by an instruction.
@@ -27,10 +25,9 @@ info:
     ## Asynchronous processing
 
     Instructions are submitted through `POST /instructions/batch` and are
-    executed asynchronously. A `PENDING` result means the individual
-    instruction was accepted and stored; it does not mean execution has
-    completed. No push mechanism (webhooks or callbacks) exists. Clients
-    track each accepted instruction with
+    executed asynchronously. A valid batch receives HTTP 201 with no response
+    body; it does not mean execution has completed. No push mechanism
+    (webhooks or callbacks) exists. Clients track each instruction with
     `GET /instructions/{instructionBatchId}/{instructionId}`
     until it reaches a terminal status (`COMPLETED`,
     `PARTIALLY_COMPLETED`, or `FAILED`).
@@ -44,10 +41,6 @@ info:
     | `PARTIALLY_COMPLETED` | Processing has finished, but only part of the instruction was completed. No further execution will occur for this instruction. | Yes |
     | `COMPLETED` | The financial effect of the instruction was recorded successfully; this does not imply market execution. | Yes |
     | `FAILED` | The instruction could not be completed. | Yes |
-
-    `REJECTED` is not an instruction lifecycle state. It is used only in
-    `POST /instructions/batch` results when an individual item is not accepted
-    and therefore is never stored.
 
     Transitions:
 
@@ -67,10 +60,8 @@ info:
     ## Errors
 
     - `POST /instructions/batch` returns **HTTP 400** only when the batch
-      request itself is malformed. Validation and business-rule errors for an
-      individual instruction are returned in that item's batch result with
-      status `REJECTED` and an `error.code`. Clients must branch on `code`,
-      not on the batch HTTP status.
+      request itself is malformed. Processing errors for an individual
+      instruction are exposed by the instruction lookup response.
     - JSON Schema violations map to specific codes where one exists:
       a missing `amount` for INVEST or DIVEST → `AMOUNT_REQUIRED`;
       an `amount` below 1 → `INVALID_AMOUNT`. Every other
@@ -101,23 +92,12 @@ info:
     after the instruction is terminal. `instructionBatchId` is a correlation
     identifier and is not the idempotency key.
 
-    After a timeout or a 5xx on `POST /instructions/batch`, the client may
-    resend the same batch with the same instruction payloads and the same
-    `instructionId` values. For each item:
-
-    - `PENDING`: the instruction was accepted by this submission and stored.
-    - `REJECTED` with `DUPLICATE_INSTRUCTION`: an instruction with this ID
-      already exists. The server does not check whether the payload is the
-      same. Call
-      `GET /instructions/{instructionBatchId}/{instructionId}`: if the
-      returned details match the submitted item, an earlier attempt succeeded
-      and nothing more is needed; otherwise the ID collides with another
-      instruction and a new `instructionId` must be used.
+    After a timeout or a 5xx on `POST /instructions/batch`, call
+    `GET /instructions/{instructionBatchId}/{instructionId}` to determine
+    whether each submitted instruction was stored before retrying.
 
     ## Known limitations of this version
 
-    - Instructions have no creation or update timestamps.
-    - No failure reason is exposed for `FAILED` instructions.
     - Instruction endpoints expose only instruction-level status; generated
       orders, trades, and per-asset execution details are intentionally not returned.
     - There is no endpoint that lists the instructions of an investment
@@ -146,9 +126,7 @@ paths:
         accepted. A batch containing a single instruction is valid. See
         *Errors* and *Retries and idempotency* for submission and retry rules.
 
-        The response always has HTTP status 207, with one result per
-        submitted instruction, in the same order as the request. Check
-        each result's `status` field rather than the HTTP status.
+        A valid batch is accepted with HTTP status 201 and no response body.
 
         HTTP 400 is only returned when the batch request itself is
         malformed (for example, invalid JSON or a missing or empty
@@ -181,30 +159,8 @@ paths:
 
       responses:
 
-        '207':
-          description: >
-            Batch processed. Each instruction was validated and stored
-            independently; check status on each result. A PENDING result
-            means the instruction was stored and can be tracked with
-            GET /instructions/{instructionBatchId}/{instructionId}. A REJECTED
-            result means it was not stored; see its error.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InstructionBatchResponse'
-
-              example:
-                instructionBatchId: 600001
-                results:
-
-                  - instructionId: 100001
-                    status: PENDING
-
-                  - instructionId: 100002
-                    status: REJECTED
-                    error:
-                      code: DUPLICATE_INSTRUCTION
-                      message: Instruction with the specified instructionId already exists.
+        '201':
+          description: Created
 
         '400':
           description: >
@@ -262,11 +218,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstructionBatchDetailsResponse'
+                $ref: '#/components/schemas/InstructionBatchResponse'
 
               example:
+                id: 1
                 instructionBatchId: 600001
+                statusId: 2
                 status: COMPLETED
+                statusDescription: Completed
+                creationTime: '2026-09-27T10:15:00Z'
+                updateTime: '2026-09-27T10:16:00Z'
+                errors: []
 
         '400':
           $ref: '#/components/responses/InvalidRequest'
@@ -333,15 +295,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstructionDetailsResponse'
+                $ref: '#/components/schemas/InstructionChildResponse'
 
               example:
+                id: 1
+                instructionBatchId: 600001
                 instructionId: 100001
                 portfolioId: 200001
                 instructionType: INVEST
                 amount: 50000000
                 investmentPlanId: 300002
                 status: COMPLETED
+                statusDescription: Completed
+                creationTime: '2026-09-27T10:15:00Z'
+                updateTime: '2026-09-27T10:16:00Z'
+                errors: []
 
         '400':
           $ref: '#/components/responses/InvalidRequest'
@@ -404,9 +372,9 @@ paths:
 
               example:
                 portfolioId: 112910912784151
-                investmentPlanId: 300002
+                planId: 300002
                 cashBalance: 5000000
-                investmentValue: 45100000
+                value: 45100000
                 assets:
                   - isin: IRTKMOFD0001
                     symbol: عیار
@@ -450,10 +418,8 @@ paths:
       operationId: getPortfolioNetMarketValue
       summary: Get portfolio net market value
       description: >
-        Returns the current net market value for the portfolio. The Postman
-        collection does not include a saved response body, so this contract
-        does not assert an undocumented payload shape. An invalid portfolioId
-        returns HTTP 400 with INVALID_REQUEST.
+        Returns the current net market value breakdown for the portfolio.
+        An invalid portfolioId returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
 
@@ -473,7 +439,10 @@ paths:
           description: Current portfolio net market value
           content:
             application/json:
-              schema: {}
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PortfolioNetMarketValueResponse'
 
         '400':
           $ref: '#/components/responses/InvalidRequest'
@@ -526,40 +495,45 @@ paths:
           in: query
           required: true
           description: >
-            Start of the date range (inclusive), as an ISO 8601 local
-            date-time. Must not be later than to.
+            Start of the date range (inclusive), as an ISO 8601 date-time.
+            Must not be later than to.
           schema:
             type: string
-            example: '2026-10-01T00:00:00'
+            format: date-time
+            example: '2026-10-01T00:00:00Z'
 
         - name: to
           in: query
           required: true
           description: >
-            End of the date range (inclusive), as an ISO 8601 local date-time.
+            End of the date range (inclusive), as an ISO 8601 date-time.
             Must not be earlier than from.
           schema:
             type: string
-            example: '2026-10-12T23:59:59'
+            format: date-time
+            example: '2026-10-12T23:59:59Z'
 
         - name: page
           in: query
-          required: true
+          required: false
           description: Zero-based page index
           schema:
             type: integer
             format: int32
             minimum: 0
+            default: 0
             example: 0
 
         - name: pageSize
           in: query
-          required: true
+          required: false
           description: Number of transactions to return per page
           schema:
             type: integer
             format: int32
             minimum: 1
+            maximum: 20
+            default: 10
             example: 10
 
       responses:
@@ -569,7 +543,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PortfolioTransactionHistoryResponse'
+                $ref: '#/components/schemas/PortfolioTransactionResponse'
 
         '400':
           $ref: '#/components/responses/InvalidRequest'
@@ -637,19 +611,18 @@ components:
 
     InstructionRequest:
       type: object
-      additionalProperties: false
 
       required:
         - instructionId
         - portfolioId
         - amount
+        - investmentPlanId
 
       properties:
 
         instructionId:
           type: integer
           format: int64
-          minimum: 1
           description: >
             Client-generated unique identifier of the instruction. It acts
             as the idempotency key.
@@ -664,7 +637,6 @@ components:
         portfolioId:
           type: integer
           format: int64
-          minimum: 1
           description: >
             Identifier of the portfolio.
 
@@ -676,7 +648,6 @@ components:
         amount:
           type: integer
           format: int64
-          minimum: 1
           description: >
             Monetary amount of the instruction, in Rial.
 
@@ -689,85 +660,81 @@ components:
 
         investmentPlanId:
           type: integer
-          nullable: true
           format: int64
-          minimum: 1
           description: >
             Default investment plan of the portfolio.
-
-            When provided, this plan becomes the default plan of the portfolio.
-
-            When creating a new portfolio, investmentPlanId is required.
-
-            For an existing portfolio, if investmentPlanId is omitted, the
-            portfolio's current default plan is used. If no default plan exists,
-            INVEST is rejected with INVESTMENT_PLAN_REQUIRED.
+            This field is required by the backoffice request contract.
 
 
-    InstructionDetailsResponse:
+    InstructionChildErrorResponse:
       type: object
-      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int64
+        instructionBatchId:
+          type: integer
+          format: int64
+        instructionId:
+          type: integer
+          format: int64
+        portfolioId:
+          type: integer
+          format: int64
+        errorMessage:
+          type: string
+        creationTime:
+          type: string
+          format: date-time
+        updateTime:
+          type: string
+          format: date-time
+
+
+    InstructionChildResponse:
+      type: object
       description: >
         Submitted instruction fields plus the current instruction-level status.
         This schema intentionally does not expose generated orders, trades, or
         per-asset execution details.
-
-      required:
-        - instructionId
-        - portfolioId
-        - instructionType
-        - status
-
       properties:
-
-        instructionId:
+        id:
           type: integer
           format: int64
-
-        portfolioId:
-          type: integer
-          format: int64
-
-        instructionType:
-          $ref: '#/components/schemas/InstructionType'
-
-        amount:
-          type: integer
-          nullable: true
-          format: int64
-          description: >
-            Total monetary amount of the instruction, in Rial, as submitted.
-
-        investmentPlanId:
-          type: integer
-          nullable: true
-          format: int64
-          description: investmentPlanId as submitted; null when not provided.
-
-        status:
-          $ref: '#/components/schemas/InstructionStatus'
-
-
-    InstructionBatchDetailsResponse:
-      type: object
-      additionalProperties: false
-
-      required:
-        - instructionBatchId
-        - status
-
-      properties:
-
         instructionBatchId:
           type: integer
           format: int64
-
+        instructionId:
+          type: integer
+          format: int64
+        portfolioId:
+          type: integer
+          format: int64
+        instructionType:
+          type: string
+        amount:
+          type: integer
+          format: int64
+        investmentPlanId:
+          type: integer
+          format: int64
+        creationTime:
+          type: string
+          format: date-time
+        updateTime:
+          type: string
+          format: date-time
         status:
-          $ref: '#/components/schemas/InstructionStatus'
+          type: string
+        statusDescription:
+          type: string
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstructionChildErrorResponse'
 
     InstructionBatchRequest:
       type: object
-      additionalProperties: false
 
       required:
         - instructionBatchId
@@ -781,15 +748,9 @@ components:
         instructionBatchId:
           type: integer
           format: int64
-          minimum: 1
           description: >
-            Client-generated unique identifier of the batch request. It is
-            echoed back in the response, for correlating the request with
-            its result and for logging or support purposes. It does not
-            affect deduplication: each instruction's own instructionId is
-            still the idempotency key, so resubmitting the same batch
-            (whether under the same or a different instructionBatchId) is
-            safe.
+            Client-generated unique identifier of the batch request, used for
+            correlation and subsequent batch lookup.
 
         instructionType:
           $ref: '#/components/schemas/InstructionType'
@@ -797,20 +758,19 @@ components:
         sumInvest:
           type: integer
           format: int64
-          minimum: 0
           description: >
             Total INVEST amount in the batch. It is zero for a DIVEST batch.
 
         sumDivest:
           type: integer
           format: int64
-          minimum: 0
           description: >
             Total DIVEST amount in the batch. It is zero for an INVEST batch.
 
         instructions:
           type: array
           minItems: 1
+          maxItems: 2147483647
           description: >
             Instructions to submit. Each item is validated independently.
             A batch may contain one or more instructions.
@@ -820,120 +780,55 @@ components:
 
     InstructionBatchResponse:
       type: object
-      additionalProperties: false
-
-      required:
-        - instructionBatchId
-        - results
-
       properties:
-
+        id:
+          type: integer
+          format: int64
         instructionBatchId:
           type: integer
           format: int64
-          description: instructionBatchId as submitted.
-
-        results:
-          type: array
-          description: >
-            One result per submitted instruction, in the same order as
-            the request.
-          items:
-            $ref: '#/components/schemas/InstructionBatchResult'
-
-
-    InstructionBatchResult:
-      type: object
-      additionalProperties: false
-      description: >
-        Result of submitting one instruction from the batch. status is
-        always PENDING or REJECTED here: PENDING means the instruction was
-        accepted and stored and can be tracked with
-        GET /instructions/{instructionBatchId}/{instructionId}; REJECTED means
-        it was not stored, and error is present with the reason.
-
-      required:
-        - instructionId
-        - status
-
-      properties:
-
-        instructionId:
+        statusId:
           type: integer
           format: int64
-          description: instructionId of the corresponding instruction in the request.
-
         status:
-          $ref: '#/components/schemas/InstructionSubmissionStatus'
-
-        error:
-          $ref: '#/components/schemas/ErrorResponse'
-
-      oneOf:
-
-        - properties:
-            status:
-              enum:
-                - PENDING
-          not:
-            properties:
-              error:
-                $ref: '#/components/schemas/ErrorResponse'
-            required:
-              - error
-
-        - properties:
-            status:
-              enum:
-                - REJECTED
-            error:
-              $ref: '#/components/schemas/ErrorResponse'
-          required:
-            - error
+          type: string
+        statusDescription:
+          type: string
+        creationTime:
+          type: string
+          format: date-time
+        updateTime:
+          type: string
+          format: date-time
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstructionChildErrorResponse'
 
 
     PortfolioDetailsResponse:
       type: object
-      additionalProperties: false
-
-      required:
-        - portfolioId
-        - investmentPlanId
-        - cashBalance
-        - investmentValue
-        - assets
-        - timestamp
-
       properties:
 
         portfolioId:
           type: integer
           format: int64
 
-        investmentPlanId:
+        planId:
           type: integer
-          nullable: true
           format: int64
           description: >
             Default investment plan of the portfolio.
 
-            May be null if no plan has been assigned. Accounts created
-            through this API always have a default plan, because
-            investmentPlanId is required at creation. INVEST
-            instructions for an account without a default plan must provide
-            a plan.
-
         cashBalance:
           type: integer
           format: int64
-          minimum: 0
           description: >
             Cash balance available in the portfolio, in Rial.
 
-        investmentValue:
+        value:
           type: integer
           format: int64
-          minimum: 0
           description: >
             Total value of the portfolio, in Rial. Equal to the cash
             balance plus the market value (quantity × lastMarketPrice) of all
@@ -944,7 +839,7 @@ components:
           description: >
             Current asset holdings of the portfolio.
           items:
-            $ref: '#/components/schemas/PortfolioAsset'
+            $ref: '#/components/schemas/PortfolioAssetDto'
 
         timestamp:
           type: string
@@ -953,16 +848,8 @@ components:
             Date and time this valuation was generated, in UTC.
 
 
-    PortfolioAsset:
+    PortfolioAssetDto:
       type: object
-      additionalProperties: false
-
-      required:
-        - isin
-        - symbol
-        - quantity
-        - lastMarketPrice
-
       properties:
 
         isin:
@@ -978,28 +865,38 @@ components:
         quantity:
           type: integer
           format: int64
-          minimum: 0
           description: >
             Number of units of the symbol currently held.
 
         lastMarketPrice:
           type: integer
           format: int64
-          minimum: 0
           description: >
             Last known market price per unit of the symbol, in Rial.
 
 
-    PortfolioTransactionHistoryResponse:
+    PortfolioNetMarketValueResponse:
       type: object
-      additionalProperties: false
+      properties:
+        portfolioId:
+          type: integer
+          format: int64
+        marketValue:
+          type: integer
+          format: int64
+        cashValue:
+          type: integer
+          format: int64
+        debt:
+          type: integer
+          format: int64
+        netBookValue:
+          type: integer
+          format: int64
 
-      required:
-        - portfolioId
-        - from
-        - to
-        - transactions
 
+    PortfolioTransactionResponse:
+      type: object
       properties:
 
         portfolioId:
@@ -1008,11 +905,25 @@ components:
 
         from:
           type: string
+          format: date-time
           description: Start of the requested date range (inclusive).
 
         to:
           type: string
+          format: date-time
           description: End of the requested date range (inclusive).
+
+        page:
+          type: integer
+          format: int32
+
+        pageSize:
+          type: integer
+          format: int32
+
+        totalPages:
+          type: integer
+          format: int32
 
         transactions:
           type: array
@@ -1020,37 +931,34 @@ components:
             Transactions of the portfolio within the requested date range,
             sorted by timestamp ascending.
           items:
-            $ref: '#/components/schemas/Transaction'
+            $ref: '#/components/schemas/PortfolioTransaction'
 
 
-    Transaction:
+    PortfolioTransaction:
       type: object
-      additionalProperties: false
       description: >
         A single investment or portfolio transaction. trade is present only
-        when type is BUY or SELL, and absent for DEPOSIT and WITHDRAW.
-
-      required:
-        - transactionId
-        - type
-        - amount
-        - timestamp
+        when type is BUY or SELL, and absent for DEPOSIT and WITHDRAWAL.
 
       properties:
 
         transactionId:
           type: integer
           format: int64
-          minimum: 1
           description: Unique identifier of the transaction.
 
         type:
           $ref: '#/components/schemas/TransactionType'
 
+        statusCode:
+          type: string
+
+        statusDescription:
+          type: string
+
         amount:
           type: integer
           format: int64
-          minimum: 1
           description: >
             Monetary value of the transaction, in Rial. For BUY and SELL it
             equals trade.quantity × trade.price.
@@ -1061,44 +969,12 @@ components:
           description: Date and time the transaction took place, in UTC.
 
         trade:
-          $ref: '#/components/schemas/TransactionTrade'
-
-      oneOf:
-
-        - properties:
-            type:
-              enum:
-                - BUY
-                - SELL
-            trade:
-              $ref: '#/components/schemas/TransactionTrade'
-          required:
-            - trade
-
-        - properties:
-            type:
-              enum:
-                - DEPOSIT
-                - WITHDRAW
-          not:
-            properties:
-              trade:
-                $ref: '#/components/schemas/TransactionTrade'
-            required:
-              - trade
+          $ref: '#/components/schemas/PortfolioTrade'
 
 
-    TransactionTrade:
+    PortfolioTrade:
       type: object
-      additionalProperties: false
       description: Trade details of a BUY or SELL transaction.
-
-      required:
-        - isin
-        - symbol
-        - symbolName
-        - quantity
-        - price
 
       properties:
 
@@ -1120,13 +996,11 @@ components:
         quantity:
           type: integer
           format: int64
-          minimum: 1
           description: Number of units traded.
 
         price:
           type: integer
           format: int64
-          minimum: 1
           description: Price per unit for this trade, in Rial.
 
 
@@ -1134,12 +1008,12 @@ components:
       type: string
       description: |
         - `DEPOSIT`: cash added to the account.
-        - `WITHDRAW`: cash taken out of the account.
+        - `WITHDRAWAL`: cash taken out of the account.
         - `BUY`: units of an asset bought.
         - `SELL`: units of an asset sold.
       enum:
         - DEPOSIT
-        - WITHDRAW
+        - WITHDRAWAL
         - BUY
         - SELL
 
@@ -1153,41 +1027,6 @@ components:
         - INVEST
         - DIVEST
 
-
-    InstructionStatus:
-      type: string
-      description: |
-        Instruction-level processing status.
-
-        - `PENDING`: accepted and stored; processing has not started yet.
-        - `EXECUTING`: processing has started.
-        - `PARTIALLY_COMPLETED`: processing has finished, but only part of
-          the instruction was completed. No further execution will occur for
-          this instruction. This is a terminal status.
-        - `COMPLETED`: the financial effect was recorded successfully in full.
-          This is a terminal status and does not imply market execution.
-        - `FAILED`: the instruction could not be completed. This is a terminal
-          status.
-
-        These statuses are intentionally instruction-level. The API does not
-        expose the generated orders or their individual execution states.
-      enum:
-        - PENDING
-        - EXECUTING
-        - PARTIALLY_COMPLETED
-        - COMPLETED
-        - FAILED
-
-    InstructionSubmissionStatus:
-      type: string
-      description: |
-        Result of submitting an individual item in a batch.
-
-        - `PENDING`: accepted and stored for asynchronous processing.
-        - `REJECTED`: not accepted and never stored.
-      enum:
-        - PENDING
-        - REJECTED
 
     ErrorResponse:
       type: object
