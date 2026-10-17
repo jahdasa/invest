@@ -124,7 +124,7 @@ info:
       not yet been agreed and is intentionally left unspecified.
     - `GET /portfolios/{portfolioId}/net-market-value` returns the current
       market-value breakdown (`marketValue`, `cashValue`, `debt`, and
-      `netBookValue`) and can be consulted before initiating a withdrawal.
+      `netValue`) and can be consulted before initiating a withdrawal.
       The response is a valuation snapshot; it does not reserve funds or
       guarantee that a later DIVEST instruction will succeed.
 
@@ -921,7 +921,7 @@ components:
         debt:
           type: integer
           format: int64
-        netBookValue:
+        netValue:
           type: integer
           format: int64
 
