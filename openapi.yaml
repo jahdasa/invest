@@ -25,39 +25,82 @@ info:
     ## Asynchronous processing
 
     Instructions are submitted through `POST /instructions/batch` and are
-    executed asynchronously. A valid batch receives HTTP 201 with no response
-    body; it does not mean execution has completed. No push mechanism
+    processed asynchronously. A valid batch receives HTTP 201 with no response
+    body; it does not mean processing has finished. No push mechanism
     (webhooks or callbacks) exists. Clients can track batch-level status with
-    `GET /instructions/batch/{instructionBatchId}` and instruction-level status
-    with `GET /instructions/{instructionBatchId}/{instructionId}`.
-    `PARTIALLY_COMPLETED` applies only to the batch level. An individual
-    instruction reaches `COMPLETED` or `FAILED`; while processing, it may be
-    `PENDING` or `EXECUTING`.
+    `GET /instructions/batch/{instructionBatchId}`, instruction-level status
+    with `GET /instructions/{instructionBatchId}/{instructionId}`, and every
+    instruction of a portfolio with `GET /instructions/portfolio/{portfolioId}`.
+
+    Processing has three stages:
+
+    1. **Execute.** Each instruction is validated. Valid instructions are
+       stored and sent for execution (`EXECUTED`); their cash movement is
+       recorded as a draft. Invalid instructions are not executed; their
+       reasons are returned in `errors`.
+    2. **Approve or reject.** The operations team reviews the batch. Approval
+       records its financial effect provisionally (`APPROVED`); rejection
+       withdraws it and nothing is recorded (`REJECTED`).
+    3. **Finalize.** When the business day is closed, the approved
+       instructions of that day become `FINALIZED`: the final approval.
+       A finalized instruction or batch can no longer change in any way.
 
     ## Instruction status lifecycle
 
-    `PARTIALLY_COMPLETED` is a batch-level status only; it is not an
-    instruction-level status.
-
     | Instruction status | Meaning | Terminal |
     |---|---|---|
-    | `PENDING` | Accepted and stored; processing has not started yet. | No |
-    | `EXECUTING` | Processing has started. | No |
-    | `COMPLETED` | The financial effect of the instruction was recorded successfully; this does not imply market execution. | Yes |
-    | `FAILED` | The instruction could not be completed. The failure reason is available through the instruction's error details. | Yes |
+    | `EXECUTED` | Validated, stored and sent for execution; waiting for review. | No |
+    | `APPROVED` | Approved by operations; the financial effect is recorded provisionally. | No |
+    | `REJECTED` | Rejected by operations; no financial effect remains. | Yes |
+    | `FINALIZED` | Final approval at the close of the business day; the financial effect is final and cannot change. | Yes |
 
-    Instruction transitions:
+    There is no `COMPLETED` instruction status; `FINALIZED` is the only
+    status that means the instruction is done for good.
+
+    An instruction that fails validation is never executed and has no status.
+    `GET /instructions/{instructionBatchId}/{instructionId}` still returns it,
+    without `status`, and with the failure reasons in `errors`.
 
     | From | To | Trigger |
     |---|---|---|
-    | `PENDING` | `EXECUTING` | Processing starts. |
-    | `EXECUTING` | `COMPLETED` | Processing finishes and the instruction is completed. |
-    | `PENDING`, `EXECUTING` | `FAILED` | A processing or business-rule failure prevents completion. |
+    | — | `EXECUTED` | The instruction passes validation. |
+    | `EXECUTED` | `APPROVED` | Operations approves the batch. |
+    | `EXECUTED`, `APPROVED` | `REJECTED` | Operations rejects the batch. |
+    | `APPROVED` | `FINALIZED` | The business day is closed. |
 
-    At batch level, `PARTIALLY_COMPLETED` means that some instructions in the
-    batch completed successfully while others did not. It does not apply to
-    an individual instruction. Batch-level status is returned by
-    `GET /instructions/batch/{instructionBatchId}`.
+    ## Batch status lifecycle
+
+    | Batch status | Meaning | Terminal |
+    |---|---|---|
+    | `PENDING` | Accepted and stored; validation has not finished yet. | No |
+    | `EXECUTING` | Every instruction passed validation and was executed; waiting for review. | No |
+    | `PARTIALLY_COMPLETED` | Some instructions were executed, others failed validation (see `errors`); waiting for review. | No |
+    | `FAILED` | No instruction passed validation; nothing was executed (see `errors`). | Yes |
+    | `APPROVED` | Operations approved the executed instructions. | No |
+    | `REJECTED` | Operations rejected the executed instructions. | Yes |
+    | `FINALIZED` | Final approval at the close of the business day; cannot change. | Yes |
+
+    There is no `COMPLETED` batch status. `EXECUTING`, `PARTIALLY_COMPLETED`
+    and `FAILED` describe validation only; they say nothing about whether the
+    financial effect is recorded. That is known only from `APPROVED`,
+    `REJECTED` and `FINALIZED`. A batch moves from `PENDING` to `EXECUTING`,
+    `PARTIALLY_COMPLETED` or `FAILED`; then to `APPROVED` or `REJECTED`; and
+    from `APPROVED` to `FINALIZED`. Batch and instruction statuses move
+    together from approval on.
+
+    ## Withdrawals and debt
+
+    A DIVEST records a withdrawal. When the amount is larger than the
+    portfolio's cash, the cash goes to zero and the rest is recorded as
+    **debt**. While a portfolio has debt:
+
+    - every later INVEST, and the proceeds of every sale, pays the debt first;
+      only what is left is added to the cash;
+    - the portfolio cannot buy any asset.
+
+    A DIVEST fails validation only when the portfolio's net market value
+    (`marketValue + cashValue - debt`) is zero or negative. The current debt
+    is returned by `GET /portfolios/{portfolioId}/net-market-value`.
 
     ## Models
 
@@ -113,20 +156,24 @@ info:
     ## Cancellation and known limitations
 
     - There is currently no public API to cancel or edit a submitted batch.
-      A batch may remain `EXECUTING` while internal processing is in progress.
-      The internal team may be able to reject it through an internal process,
-      but this is not a client-accessible cancellation operation.
+      Until the business day is closed, the operations team can reject an
+      executed or approved batch through an internal process (`REJECTED`);
+      this is not a client-accessible cancellation operation. A `FINALIZED`
+      batch cannot be rejected.
     - Instruction endpoints expose only instruction-level status; generated
       orders, trades, and per-asset execution details are intentionally not returned.
-    - There is no endpoint that lists the instructions of an investment
-      account. Clients must keep the `instructionId`s they submit.
+    - `GET /instructions/portfolio/{portfolioId}` lists the executed
+      instructions of a portfolio. Instructions that failed validation were
+      never executed and do not appear there; look them up by
+      `instructionBatchId` and `instructionId`.
     - The maximum recommended/accepted number of instructions per batch has
       not yet been agreed and is intentionally left unspecified.
     - `GET /portfolios/{portfolioId}/net-market-value` returns the current
       market-value breakdown (`marketValue`, `cashValue`, `debt`, and
-      `netValue`) and can be consulted before initiating a withdrawal.
-      The response is a valuation snapshot; it does not reserve funds or
-      guarantee that a later DIVEST instruction will succeed.
+      `netValue = marketValue + cashValue - debt`) and can be consulted
+      before initiating a withdrawal. The response is a valuation snapshot;
+      it does not reserve funds or guarantee that a later DIVEST instruction
+      will succeed.
 
 servers:
   - url: https://vestapi.emofid.com/bimehma/api/v1
@@ -251,9 +298,9 @@ paths:
               example:
                 id: 1
                 instructionBatchId: 600001
-                statusId: 2
-                status: COMPLETED
-                statusDescription: Completed
+                statusId: 235
+                status: APPROVED
+                statusDescription: Approved
                 creationTime: '2026-09-27T10:15:00Z'
                 updateTime: '2026-09-27T10:16:00Z'
                 errors: []
@@ -333,8 +380,8 @@ paths:
                 instructionType: INVEST
                 amount: 50000000
                 modelId: 300002
-                status: COMPLETED
-                statusDescription: Completed
+                status: APPROVED
+                statusDescription: Approved
                 creationTime: '2026-09-27T10:15:00Z'
                 updateTime: '2026-09-27T10:16:00Z'
                 errors: []
@@ -352,6 +399,117 @@ paths:
               example:
                 code: INSTRUCTION_NOT_FOUND
                 message: Instruction with the specified instructionId does not exist.
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+
+  /instructions/portfolio/{portfolioId}:
+    get:
+      operationId: getPortfolioInstructions
+      summary: List the instructions of a portfolio
+      description: >
+        Returns every executed instruction of the portfolio, across all
+        batches, each with its current status and errors. Instructions that
+        failed validation were never executed and are not listed. A portfolio
+        with no instructions returns an empty array. An invalid portfolioId
+        returns HTTP 400 with INVALID_REQUEST.
+
+      parameters:
+
+        - name: portfolioId
+          in: path
+          required: true
+          description: Identifier of the portfolio
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+      responses:
+
+        '200':
+          description: Instructions of the portfolio
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InstructionChildResponse'
+
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /instructions/{instructionBatchId}/portfolio/{portfolioId}:
+    get:
+      operationId: getPortfolioInstructionsInBatch
+      summary: List the instructions of a portfolio within one batch
+      description: >
+        The same as `GET /instructions/portfolio/{portfolioId}`, limited to
+        one batch. Returns an empty array when the batch holds no executed
+        instruction for the portfolio. An invalid instructionBatchId or
+        portfolioId returns HTTP 400 with INVALID_REQUEST.
+
+      parameters:
+
+        - name: instructionBatchId
+          in: path
+          required: true
+          description: Identifier of the batch
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+        - name: portfolioId
+          in: path
+          required: true
+          description: Identifier of the portfolio
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+
+      responses:
+
+        '200':
+          description: Instructions of the portfolio in the batch
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InstructionChildResponse'
+
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
 
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -681,9 +839,10 @@ components:
 
             INVEST: cash deposit to record in the portfolio.
 
-            DIVEST: withdrawal/debt to record in the portfolio. It must not
-            exceed the value available to sell, otherwise the instruction
-            becomes FAILED.
+            DIVEST: withdrawal to record in the portfolio. Any part larger
+            than the portfolio's cash is recorded as debt (see *Withdrawals
+            and debt*). The instruction fails validation only when the
+            portfolio's net market value is zero or negative.
 
 
         modelId:
@@ -722,10 +881,9 @@ components:
     InstructionChildResponse:
       type: object
       description: >
-        Submitted instruction fields plus the current instruction-level status.
-        Instruction status is `PENDING`, `EXECUTING`, `COMPLETED`, or `FAILED`;
-        `PARTIALLY_COMPLETED` is a batch-level status only. The `errors` array
-        exposes failure details for an instruction when available. This schema
+        Submitted instruction fields plus the current instruction-level status
+        (see *Instruction status lifecycle*). An instruction that failed
+        validation has no `status`; its reasons are in `errors`. This schema
         intentionally does not expose generated orders, trades, or per-asset
         execution details.
       properties:
@@ -757,6 +915,14 @@ components:
           format: date-time
         status:
           type: string
+          description: >
+            Instruction-level status. Absent for an instruction that failed
+            validation.
+          enum:
+            - EXECUTED
+            - APPROVED
+            - REJECTED
+            - FINALIZED
         statusDescription:
           type: string
         errors:
@@ -823,6 +989,15 @@ components:
           format: int64
         status:
           type: string
+          description: Batch-level status (see *Batch status lifecycle*).
+          enum:
+            - PENDING
+            - EXECUTING
+            - PARTIALLY_COMPLETED
+            - FAILED
+            - APPROVED
+            - REJECTED
+            - FINALIZED
         statusDescription:
           type: string
         creationTime:
@@ -915,15 +1090,21 @@ components:
         marketValue:
           type: integer
           format: int64
+          description: Market value of the holdings, in Rial.
         cashValue:
           type: integer
           format: int64
+          description: Cash balance, in Rial. Always zero while there is debt.
         debt:
           type: integer
           format: int64
+          description: >
+            Debt left by withdrawals larger than the cash, in Rial. Paid first
+            by later deposits and sales.
         netValue:
           type: integer
           format: int64
+          description: marketValue + cashValue - debt, in Rial.
 
 
     PortfolioTransactionResponse:
@@ -1052,8 +1233,10 @@ components:
     InstructionType:
       type: string
       description: |
-        - `INVEST`: record a cash deposit in the investment account.
-        - `DIVEST`: record a withdrawal/debt in the investment account.
+        - `INVEST`: record a cash deposit in the investment account. It pays
+          any debt first.
+        - `DIVEST`: record a withdrawal in the investment account. Any part
+          larger than the cash becomes debt.
       enum:
         - INVEST
         - DIVEST
