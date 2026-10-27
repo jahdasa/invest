@@ -532,9 +532,11 @@ paths:
       operationId: getPortfolioDetails
       summary: Get portfolio details
       description: >
-        Returns the portfolio's default model, cash balance, and current asset
-        holdings. All monetary values are in Rial. An invalid portfolioId
-        returns HTTP 400 with INVALID_REQUEST.
+        Returns the portfolio's default model, cash balance, and asset
+        holdings as of the end of a closed business day. With `dayKey`, the
+        figures are those of that day; without it, they are those of the
+        latest closed business day. All monetary values are in Rial. An
+        invalid portfolioId or dayKey returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
 
@@ -546,6 +548,18 @@ paths:
             type: integer
             format: int64
             minimum: 1
+
+        - name: dayKey
+          in: query
+          required: false
+          description: >
+            Business day to report, as `yyyyMMdd` in the Gregorian calendar
+            (for example `20260729`). Optional; when omitted, the latest
+            closed business day is used.
+          schema:
+            type: integer
+            format: int32
+            example: 20260729
 
       responses:
 
