@@ -30,7 +30,7 @@ info:
     (webhooks or callbacks) exists. Clients can track batch-level status with
     `GET /instruction-batches/{instructionBatchId}`, instruction-level status
     with `GET /instruction-batches/{instructionBatchId}/instructions/{instructionId}`, and every
-    instruction of a portfolio with `GET /instructions?portfolioId={portfolioId}`.
+    instruction of a portfolio with `GET /instructions/portfolio/{portfolioId}`.
 
     Processing has three stages:
 
@@ -162,7 +162,7 @@ info:
       batch cannot be rejected.
     - Instruction endpoints expose only instruction-level status; generated
       orders, trades, and per-asset execution details are intentionally not returned.
-    - `GET /instructions?portfolioId={portfolioId}` lists the executed
+    - `GET /instructions/portfolio/{portfolioId}` lists the executed
       instructions of a portfolio. Instructions that failed validation were
       never executed and do not appear there; look them up by
       `instructionBatchId` and `instructionId`.
@@ -297,9 +297,7 @@ paths:
 
               example:
                 instructionBatchId: 600001
-                statusId: 235
                 statusCode: APPROVED
-                statusDescription: Approved
                 creationTime: '2026-09-27T10:15:00Z'
                 updateTime: '2026-09-27T10:16:00Z'
                 errors: []
@@ -413,7 +411,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
 
-  /instructions:
+  /instructions/portfolio/{portfolioId}:
     get:
       operationId: getPortfolioInstructions
       summary: List the instructions of a portfolio
@@ -422,21 +420,19 @@ paths:
         current status and errors. With `instructionBatchId`, only the
         instructions of that batch are returned. Instructions that
         failed validation were never executed and are not listed. A portfolio
-        with no instructions returns an empty array. A missing or invalid
-        portfolioId, or an invalid instructionBatchId, returns HTTP 400 with
-        INVALID_REQUEST.
+        with no instructions returns an empty array. An invalid portfolioId
+        or instructionBatchId returns HTTP 400 with INVALID_REQUEST.
 
       parameters:
 
         - name: portfolioId
-          in: query
+          in: path
           required: true
           description: Identifier of the portfolio
           schema:
             type: integer
             format: int64
             minimum: 1
-            example: 200001
 
         - name: instructionBatchId
           in: query
@@ -623,7 +619,7 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
 
-  /portfolio-transaction/{portfolioId}/transactions:
+  /portfolio-transaction/portfolio/{portfolioId}:
     get:
       operationId: getPortfolioTransactions
       summary: Get transactions for a portfolio within a date range
@@ -941,9 +937,6 @@ components:
         instructionBatchId:
           type: integer
           format: int64
-        statusId:
-          type: integer
-          format: int64
         statusCode:
           type: string
           description: Batch-level status (see *Batch status lifecycle*).
@@ -955,8 +948,6 @@ components:
             - APPROVED
             - REJECTED
             - FINALIZED
-        statusDescription:
-          type: string
         creationTime:
           type: string
           format: date-time
@@ -1120,9 +1111,6 @@ components:
           $ref: '#/components/schemas/TransactionType'
 
         statusCode:
-          type: string
-
-        statusDescription:
           type: string
 
         amount:
