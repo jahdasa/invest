@@ -8,7 +8,7 @@
   },
   "item": [
     {
-      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600002",
+      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instruction-batches/600002",
       "request": {
         "auth": {
           "type": "bearer",
@@ -28,7 +28,7 @@
           }
         ],
         "url": {
-          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600004",
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instruction-batches/600002",
           "protocol": "https",
           "host": [
             "vestapi-sandbox",
@@ -39,105 +39,15 @@
             "bimehma",
             "api",
             "v1",
-            "instructions",
-            "batch",
-            "600004"
+            "instruction-batches",
+            "600002"
           ]
         }
       },
-      "response": [
-        {
-          "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600002",
-          "originalRequest": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer 11"
-              }
-            ],
-            "url": {
-              "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch/600003",
-              "protocol": "https",
-              "host": [
-                "vestapi-sandbox",
-                "emofid",
-                "com"
-              ],
-              "path": [
-                "bimehma",
-                "api",
-                "v1",
-                "instructions",
-                "batch",
-                "600003"
-              ]
-            }
-          },
-          "status": "OK",
-          "code": 200,
-          "_postman_previewlanguage": "json",
-          "header": [
-            {
-              "key": ":status",
-              "value": "200"
-            },
-            {
-              "key": "request-id",
-              "value": "32FDC3D6-3927-44D4-A430-FA83ACC81D69"
-            },
-            {
-              "key": "vary",
-              "value": "Origin,Access-Control-Request-Method,Access-Control-Request-Headers"
-            },
-            {
-              "key": "x-content-type-options",
-              "value": "nosniff"
-            },
-            {
-              "key": "x-xss-protection",
-              "value": "0"
-            },
-            {
-              "key": "cache-control",
-              "value": "no-cache, no-store, max-age=0, must-revalidate"
-            },
-            {
-              "key": "pragma",
-              "value": "no-cache"
-            },
-            {
-              "key": "expires",
-              "value": "0"
-            },
-            {
-              "key": "x-frame-options",
-              "value": "DENY"
-            },
-            {
-              "key": "content-type",
-              "value": "application/json"
-            },
-            {
-              "key": "content-length",
-              "value": "262"
-            },
-            {
-              "key": "date",
-              "value": "Wed, 14 Oct 2026 12:12:06 GMT"
-            },
-            {
-              "key": "x-envoy-upstream-service-time",
-              "value": "402"
-            }
-          ],
-          "cookie": [],
-          "body": "{\n  \"id\": 801,\n  \"instructionBatchId\": 600003,\n  \"statusId\": 233,\n  \"status\": \"COMPLETED\",\n  \"statusDescription\": \"درخواست با موفقیت کامل انجام شده است.\",\n  \"creationTime\": \"2026-10-14T09:18:25.375596\",\n  \"updateTime\": \"2026-10-14T09:18:25.375643\",\n  \"errors\": []\n}"
-        }
-      ]
+      "response": []
     },
     {
-      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/600002/10499909",
+      "name": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instruction-batches/600002/instructions/10499909",
       "request": {
         "auth": {
           "type": "noauth"
@@ -150,7 +60,7 @@
           }
         ],
         "url": {
-          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/600002/10499909",
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instruction-batches/600002/instructions/10499909",
           "protocol": "https",
           "host": [
             "vestapi-sandbox",
@@ -161,8 +71,9 @@
             "bimehma",
             "api",
             "v1",
-            "instructions",
+            "instruction-batches",
             "600002",
+            "instructions",
             "10499909"
           ]
         }
@@ -334,7 +245,7 @@
           }
         },
         "url": {
-          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/instructions/batch",
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/v1/instruction-batches",
           "protocol": "https",
           "host": [
             "vestapi-sandbox",
@@ -345,8 +256,8 @@
             "bimehma",
             "api",
             "v1",
-            "instructions",
-            "batch"
+            "v1",
+            "instruction-batches"
           ]
         }
       },

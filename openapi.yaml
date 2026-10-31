@@ -24,13 +24,13 @@ info:
 
     ## Asynchronous processing
 
-    Instructions are submitted through `POST /instructions/batch` and are
+    Instructions are submitted through `POST /instruction-batches` and are
     processed asynchronously. A valid batch receives HTTP 201 with no response
     body; it does not mean processing has finished. No push mechanism
     (webhooks or callbacks) exists. Clients can track batch-level status with
-    `GET /instructions/batch/{instructionBatchId}`, instruction-level status
-    with `GET /instructions/{instructionBatchId}/{instructionId}`, and every
-    instruction of a portfolio with `GET /instructions/portfolio/{portfolioId}`.
+    `GET /instruction-batches/{instructionBatchId}`, instruction-level status
+    with `GET /instruction-batches/{instructionBatchId}/instructions/{instructionId}`, and every
+    instruction of a portfolio with `GET /instructions?portfolioId={portfolioId}`.
 
     Processing has three stages:
 
@@ -58,7 +58,7 @@ info:
     status that means the instruction is done for good.
 
     An instruction that fails validation is never executed and has no status.
-    `GET /instructions/{instructionBatchId}/{instructionId}` still returns it,
+    `GET /instruction-batches/{instructionBatchId}/instructions/{instructionId}` still returns it,
     without `statusCode`, and with the failure reasons in `errors`.
 
     | From | To | Trigger |
@@ -110,7 +110,7 @@ info:
 
     ## Errors
 
-    - `POST /instructions/batch` returns **HTTP 400** when the batch
+    - `POST /instruction-batches` returns **HTTP 400** when the batch
       request itself is malformed. Processing errors for an individual
       instruction are exposed by the instruction lookup response. Reuse of
       an existing instruction or batch identifier is not allowed.
@@ -129,9 +129,9 @@ info:
       500 (unexpected error) and 503 (temporarily unavailable).
       Their bodies are not guaranteed to follow `ErrorResponse`. Retry 429
       and 503 with backoff. After a 500 or a timeout on
-      `POST /instructions/batch`, the outcome of individual items may be
+      `POST /instruction-batches`, the outcome of individual items may be
       unknown: reconcile accepted items with
-      `GET /instructions/{instructionBatchId}/{instructionId}` (see
+      `GET /instruction-batches/{instructionBatchId}/instructions/{instructionId}` (see
       *Retries and idempotency*).
     - `ErrorResponse` has no trace ID and no per-field details. When
       reporting a problem, include the `code`, the request timestamp (UTC)
@@ -147,10 +147,10 @@ info:
     not allowed; the specific error code for a duplicate batch ID is not
     specified in this document.
 
-    After a timeout or a 5xx on `POST /instructions/batch`, do not blindly
+    After a timeout or a 5xx on `POST /instruction-batches`, do not blindly
     submit the same batch again with the same identifiers. Reconcile the
-    outcome by calling `GET /instructions/batch/{instructionBatchId}` and
-    `GET /instructions/{instructionBatchId}/{instructionId}` for the submitted
+    outcome by calling `GET /instruction-batches/{instructionBatchId}` and
+    `GET /instruction-batches/{instructionBatchId}/instructions/{instructionId}` for the submitted
     identifiers before creating a new request with new unique identifiers.
 
     ## Cancellation and known limitations
@@ -162,7 +162,7 @@ info:
       batch cannot be rejected.
     - Instruction endpoints expose only instruction-level status; generated
       orders, trades, and per-asset execution details are intentionally not returned.
-    - `GET /instructions/portfolio/{portfolioId}` lists the executed
+    - `GET /instructions?portfolioId={portfolioId}` lists the executed
       instructions of a portfolio. Instructions that failed validation were
       never executed and do not appear there; look them up by
       `instructionBatchId` and `instructionId`.
@@ -186,7 +186,7 @@ security:
 
 paths:
 
-  /instructions/batch:
+  /instruction-batches:
     post:
       operationId: submitInstructionBatch
       summary: Submit a batch of investment instructions
@@ -266,7 +266,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /instructions/batch/{instructionBatchId}:
+  /instruction-batches/{instructionBatchId}:
     get:
       operationId: getInstructionBatch
       summary: Get instruction batch status
@@ -333,7 +333,7 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
-  /instructions/{instructionBatchId}/{instructionId}:
+  /instruction-batches/{instructionBatchId}/instructions/{instructionId}:
     get:
       operationId: getInstruction
       summary: Get instruction details and execution status
@@ -413,91 +413,47 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
 
-  /instructions/portfolio/{portfolioId}:
+  /instructions:
     get:
       operationId: getPortfolioInstructions
       summary: List the instructions of a portfolio
       description: >
-        Returns every executed instruction of the portfolio, across all
-        batches, each with its current status and errors. Instructions that
+        Returns every executed instruction of the portfolio, each with its
+        current status and errors. With `instructionBatchId`, only the
+        instructions of that batch are returned. Instructions that
         failed validation were never executed and are not listed. A portfolio
-        with no instructions returns an empty array. An invalid portfolioId
-        returns HTTP 400 with INVALID_REQUEST.
+        with no instructions returns an empty array. A missing or invalid
+        portfolioId, or an invalid instructionBatchId, returns HTTP 400 with
+        INVALID_REQUEST.
 
       parameters:
 
         - name: portfolioId
-          in: path
+          in: query
           required: true
           description: Identifier of the portfolio
           schema:
             type: integer
             format: int64
             minimum: 1
+            example: 200001
+
+        - name: instructionBatchId
+          in: query
+          required: false
+          description: >
+            Identifier of a batch. Optional; when given, only the
+            instructions of that batch are returned.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            example: 600001
 
       responses:
 
         '200':
           description: Instructions of the portfolio
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/InstructionChildResponse'
-
-        '400':
-          $ref: '#/components/responses/InvalidRequest'
-
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-
-        '500':
-          $ref: '#/components/responses/InternalServerError'
-
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
-
-  /instructions/{instructionBatchId}/portfolio/{portfolioId}:
-    get:
-      operationId: getPortfolioInstructionsInBatch
-      summary: List the instructions of a portfolio within one batch
-      description: >
-        The same as `GET /instructions/portfolio/{portfolioId}`, limited to
-        one batch. Returns an empty array when the batch holds no executed
-        instruction for the portfolio. An invalid instructionBatchId or
-        portfolioId returns HTTP 400 with INVALID_REQUEST.
-
-      parameters:
-
-        - name: instructionBatchId
-          in: path
-          required: true
-          description: Identifier of the batch
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-
-        - name: portfolioId
-          in: path
-          required: true
-          description: Identifier of the portfolio
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-
-      responses:
-
-        '200':
-          description: Instructions of the portfolio in the batch
           content:
             application/json:
               schema:
@@ -828,7 +784,7 @@ components:
             existing instructionId is not allowed and returns
             DUPLICATE_INSTRUCTION, whatever the payload. After a
             DUPLICATE_INSTRUCTION on a retry, call
-            GET /instructions/{instructionBatchId}/{instructionId} to check
+            GET /instruction-batches/{instructionBatchId}/instructions/{instructionId} to check
             whether the original request succeeded.
 
         portfolioId:
