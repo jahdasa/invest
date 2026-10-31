@@ -59,7 +59,7 @@ info:
 
     An instruction that fails validation is never executed and has no status.
     `GET /instructions/{instructionBatchId}/{instructionId}` still returns it,
-    without `status`, and with the failure reasons in `errors`.
+    without `statusCode`, and with the failure reasons in `errors`.
 
     | From | To | Trigger |
     |---|---|---|
@@ -225,12 +225,12 @@ paths:
                 - instructionId: 10499909
                   portfolioId: 209999
                   amount: 8643
-                  modelId: 100000
+                  modelCode: 100000
 
                 - instructionId: 105000012
                   portfolioId: 210000
                   amount: 6951
-                  modelId: 100000
+                  modelCode: 100000
 
       responses:
 
@@ -296,10 +296,9 @@ paths:
                 $ref: '#/components/schemas/InstructionBatchResponse'
 
               example:
-                id: 1
                 instructionBatchId: 600001
                 statusId: 235
-                status: APPROVED
+                statusCode: APPROVED
                 statusDescription: Approved
                 creationTime: '2026-09-27T10:15:00Z'
                 updateTime: '2026-09-27T10:16:00Z'
@@ -373,15 +372,13 @@ paths:
                 $ref: '#/components/schemas/InstructionChildResponse'
 
               example:
-                id: 1
                 instructionBatchId: 600001
                 instructionId: 100001
                 portfolioId: 200001
                 instructionType: INVEST
                 amount: 50000000
-                modelId: 300002
-                status: APPROVED
-                statusDescription: Approved
+                modelCode: 300002
+                statusCode: APPROVED
                 creationTime: '2026-09-27T10:15:00Z'
                 updateTime: '2026-09-27T10:16:00Z'
                 errors: []
@@ -572,7 +569,7 @@ paths:
 
               example:
                 portfolioId: 112910912784151
-                modelId: 300002
+                modelCode: 300002
                 cashBalance: 5000000
                 value: 45100000
                 assets:
@@ -816,7 +813,7 @@ components:
         - instructionId
         - portfolioId
         - amount
-        - modelId
+        - modelCode
 
       properties:
 
@@ -843,7 +840,7 @@ components:
             For DIVEST instructions, the portfolio must already exist.
 
             For INVEST instructions, a new portfolio is created with this
-            identifier if it does not exist; modelId is then required.
+            identifier if it does not exist; modelCode is then required.
 
         amount:
           type: integer
@@ -859,20 +856,17 @@ components:
             portfolio's net market value is zero or negative.
 
 
-        modelId:
+        modelCode:
           type: integer
           format: int64
           description: >
-            Default investment model of the portfolio.
+            Code of the portfolio's default investment model.
             This field is required by the backoffice request contract.
 
 
     InstructionChildErrorResponse:
       type: object
       properties:
-        id:
-          type: integer
-          format: int64
         instructionBatchId:
           type: integer
           format: int64
@@ -897,13 +891,10 @@ components:
       description: >
         Submitted instruction fields plus the current instruction-level status
         (see *Instruction status lifecycle*). An instruction that failed
-        validation has no `status`; its reasons are in `errors`. This schema
+        validation has no `statusCode`; its reasons are in `errors`. This schema
         intentionally does not expose generated orders, trades, or per-asset
         execution details.
       properties:
-        id:
-          type: integer
-          format: int64
         instructionBatchId:
           type: integer
           format: int64
@@ -918,16 +909,17 @@ components:
         amount:
           type: integer
           format: int64
-        modelId:
+        modelCode:
           type: integer
           format: int64
+          description: Code of the investment model given in the instruction.
         creationTime:
           type: string
           format: date-time
         updateTime:
           type: string
           format: date-time
-        status:
+        statusCode:
           type: string
           description: >
             Instruction-level status. Absent for an instruction that failed
@@ -937,8 +929,6 @@ components:
             - APPROVED
             - REJECTED
             - FINALIZED
-        statusDescription:
-          type: string
         errors:
           type: array
           items:
@@ -992,16 +982,13 @@ components:
     InstructionBatchResponse:
       type: object
       properties:
-        id:
-          type: integer
-          format: int64
         instructionBatchId:
           type: integer
           format: int64
         statusId:
           type: integer
           format: int64
-        status:
+        statusCode:
           type: string
           description: Batch-level status (see *Batch status lifecycle*).
           enum:
@@ -1034,11 +1021,11 @@ components:
           type: integer
           format: int64
 
-        modelId:
+        modelCode:
           type: integer
           format: int64
           description: >
-            Default investment model of the portfolio.
+            Code of the portfolio's default investment model.
 
         cashBalance:
           type: integer
@@ -1291,11 +1278,11 @@ components:
           See *Retries and idempotency*. A reused `instructionBatchId` is also
           rejected, but its specific error code must be confirmed by the API
           implementation.
-        - `INVESTMENT_PLAN_NOT_FOUND` (400): `modelId` does not
+        - `INVESTMENT_PLAN_NOT_FOUND` (400): `modelCode` does not
           refer to an existing model.
         - `INVESTMENT_PLAN_REQUIRED` (400): no model could be resolved,
           either because an INVEST creates a new account without
-          `modelId`, or because the account has no default model.
+          `modelCode`, or because the account has no default model.
         - `INVESTMENT_NOT_FOUND` (400 on POST, 404 on GET): the investment
           account does not exist.
         - `INSTRUCTION_NOT_FOUND` (404): the instruction does not exist.
