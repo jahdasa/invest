@@ -11,7 +11,7 @@ info:
     ## Conventions
 
     - **Monetary unit.** Every monetary value in this API (`amount`,
-      `price`, `lastMarketPrice`, `cashBalance`,
+      `price`, `lastMarketPrice`, `adjClosing`, `cashBalance`,
       `value`) is an integer number of **Iranian Rial (IRR)**.
       Toman is never used.
     - **Money identity.** For an account, `value`
@@ -31,6 +31,10 @@ info:
     `GET /instruction-batches/{instructionBatchId}`, instruction-level status
     with `GET /instruction-batches/{instructionBatchId}/instructions/{instructionId}`, and every
     instruction of a portfolio with `GET /instructions/portfolio/{portfolioId}`.
+
+    A single withdrawal can instead be submitted through
+    `POST /instruction-batches/divest`, which is synchronous: see
+    *Synchronous withdrawal*.
 
     Processing has three stages:
 
@@ -64,6 +68,7 @@ info:
     | From | To | Trigger |
     |---|---|---|
     | — | `EXECUTED` | The instruction passes validation. |
+    | — | `APPROVED` | A withdrawal submitted through `POST /instruction-batches/divest` passes validation. |
     | `EXECUTED` | `APPROVED` | Operations approves the batch. |
     | `EXECUTED`, `APPROVED` | `REJECTED` | Operations rejects the batch. |
     | `APPROVED` | `FINALIZED` | The business day is closed. |
@@ -98,9 +103,20 @@ info:
       only what is left is added to the cash;
     - the portfolio cannot buy any asset.
 
-    A DIVEST fails validation only when the portfolio's net market value
-    (`marketValue + cashValue - debt`) is zero or negative. The current debt
-    is returned by `GET /portfolios/{portfolioId}/net-market-value`.
+    A DIVEST fails validation when the portfolio's net market value
+    (`marketValue + cashValue - debt`) is zero or negative, or when its
+    `amount` is larger than that net market value. The current values are
+    returned by `GET /portfolios/{portfolioId}/net-market-value`.
+
+    ## Synchronous withdrawal
+
+    `POST /instruction-batches/divest` records one DIVEST instruction and its
+    withdrawal in a single call. There is no execution stage and no review
+    by operations: when the call returns HTTP 201, the withdrawal is already
+    recorded on the portfolio, and the batch and the instruction are both
+    `APPROVED`. Like every approved instruction, they become `FINALIZED` when
+    the business day is closed. A request that fails validation stores
+    nothing, so a corrected request may reuse the same identifiers.
 
     ## Models
 
@@ -223,12 +239,12 @@ paths:
               instructions:
 
                 - instructionId: 10499909
-                  portfolioId: 209999
+                  portfolioId: 112700002099991
                   amount: 8643
                   modelCode: 100000
 
                 - instructionId: 105000012
-                  portfolioId: 210000
+                  portfolioId: 112700002100001
                   amount: 6951
                   modelCode: 100000
 
@@ -250,6 +266,103 @@ paths:
               example:
                 code: INVALID_REQUEST
                 message: instructions must be a non-empty array.
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /instruction-batches/divest:
+    post:
+      operationId: submitSingleDivest
+      summary: Record a single withdrawal synchronously
+      description: |
+        Records one DIVEST instruction and its withdrawal in the same call
+        (see *Synchronous withdrawal*). Unlike `POST /instruction-batches`,
+        the whole request either succeeds or fails: on HTTP 201 the
+        withdrawal is recorded and the response is the batch, already
+        `APPROVED`; on any error nothing is stored.
+
+        The request uses the same body as `POST /instruction-batches`, with
+        these additional rules:
+
+        - `instructionType` must be `DIVEST`.
+        - `instructions` must contain exactly one instruction.
+        - `sumInvest` must be `0` and `sumDivest` must equal the
+          instruction's `amount`.
+        - `amount` must not be larger than the portfolio's net market value,
+          and that value must be positive (see *Withdrawals and debt*). Any
+          part of the amount larger than the portfolio's cash is recorded as
+          debt.
+        - `modelCode` must refer to an existing model. It becomes the
+          portfolio's default model if it is not already.
+        - `instructionBatchId` and `instructionId` must not have been used
+          before.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstructionBatchRequest'
+
+            example:
+              instructionBatchId: 20202021
+              instructionType: DIVEST
+              sumInvest: 0
+              sumDivest: 9660
+              instructions:
+
+                - instructionId: 20202020
+                  portfolioId: 112712345678901
+                  amount: 9660
+                  modelCode: 100420
+
+      responses:
+
+        '201':
+          description: The withdrawal is recorded; the batch is `APPROVED`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstructionBatchResponse'
+
+              example:
+                instructionBatchId: 20202021
+                statusCode: APPROVED
+                creationTime: '2026-11-21T07:15:30Z'
+                updateTime: '2026-11-21T07:15:30Z'
+                errors: []
+
+        '400':
+          description: >
+            The request is invalid and nothing was stored.
+            `INVALID_REQUEST`: the body does not match the schema,
+            `instructionType` is not DIVEST, `instructions` does not contain
+            exactly one instruction, or `sumInvest`/`sumDivest` do not match
+            the amount. `NET_MARKET_VALUE_EXCEEDED`: the amount is larger than
+            the portfolio's net market value, or the portfolio has no positive
+            net market value. `INVESTMENT_PLAN_NOT_FOUND`: `modelCode` does
+            not refer to an existing model. `DUPLICATE_INSTRUCTION`: the
+            `instructionBatchId` or `instructionId` was used before.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+              example:
+                code: NET_MARKET_VALUE_EXCEEDED
+                message: The divest amount exceeds the positive net market value of the portfolio.
 
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -372,7 +485,7 @@ paths:
               example:
                 instructionBatchId: 600001
                 instructionId: 100001
-                portfolioId: 200001
+                portfolioId: 112700002000011
                 instructionType: INVEST
                 amount: 50000000
                 modelCode: 300002
@@ -720,6 +833,84 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
 
+  /quote:
+    get:
+      operationId: getQuote
+      summary: Get the latest market quote of an asset
+      description: >
+        Returns the latest market quote of one asset, read from the market
+        data service at the time of the call. Prices are in Rial per unit.
+        The quote is informational: it is not the price an instruction will
+        be executed at.
+
+      parameters:
+
+        - name: isin
+          in: query
+          required: true
+          description: >
+            ISIN of the asset: 12 or 13 upper-case letters and digits. A
+            missing or malformed value returns HTTP 400 with INVALID_REQUEST.
+          schema:
+            type: string
+            pattern: '^[A-Z0-9]{12,13}$'
+            example: IRTKMOFD0001
+
+      responses:
+
+        '200':
+          description: Latest quote of the asset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceQuote'
+
+              example:
+                isin: IRTKMOFD0001
+                symbol: عیار
+                adjClosing: 523882
+                closingChgPer: 1.25
+
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+
+        '404':
+          description: No quote exists for the ISIN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+              example:
+                code: QUOTE_NOT_FOUND
+                message: No quote exists for the specified isin.
+
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+        '502':
+          description: >
+            The market data service returned an error or an unreadable
+            response. Retry with backoff.
+
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+        '504':
+          description: >
+            The market data service did not answer in time. Retry with
+            backoff.
+
+
 components:
 
   securitySchemes:
@@ -787,7 +978,9 @@ components:
           type: integer
           format: int64
           description: >
-            Identifier of the portfolio.
+            Identifier of the portfolio: 15 digits made of `1127`, the
+            10-digit client number, then `1` (for example `112700002099991`).
+            Any other value is rejected with INVALID_REQUEST.
 
             For DIVEST instructions, the portfolio must already exist.
 
@@ -804,8 +997,8 @@ components:
 
             DIVEST: withdrawal to record in the portfolio. Any part larger
             than the portfolio's cash is recorded as debt (see *Withdrawals
-            and debt*). The instruction fails validation only when the
-            portfolio's net market value is zero or negative.
+            and debt*). The instruction fails validation when the portfolio's
+            net market value is zero or negative, or smaller than the amount.
 
 
         modelCode:
@@ -1161,6 +1354,46 @@ components:
           description: Price per unit for this trade, in Rial.
 
 
+    PriceQuote:
+      type: object
+      description: Latest market quote of an asset, as reported by the market data service.
+
+      properties:
+
+        isin:
+          type: string
+          description: ISIN of the asset.
+          example: IRTKMOFD0001
+
+        symbol:
+          type: string
+          description: Trading symbol (short code).
+          example: عیار
+
+        adjClosing:
+          type: integer
+          format: int64
+          description: Adjusted closing (last) price per unit, in Rial.
+
+        closingChgPer:
+          type: number
+          description: >
+            Change of the adjusted closing price from the previous trading
+            day's adjusted closing price, in percent.
+
+        lastTradeTime:
+          type: string
+          description: Time of the last trade, as reported by the market data service.
+
+        currentDate:
+          type: string
+          description: Date of the quote, as reported by the market data service.
+
+        tseUrl:
+          type: string
+          description: Link to the asset's page on the Tehran Stock Exchange website.
+
+
     TransactionType:
       type: string
       description: |
@@ -1230,6 +1463,11 @@ components:
         - `INVESTMENT_NOT_FOUND` (400 on POST, 404 on GET): the investment
           account does not exist.
         - `INSTRUCTION_NOT_FOUND` (404): the instruction does not exist.
+        - `NET_MARKET_VALUE_EXCEEDED` (400): a DIVEST amount is larger than
+          the portfolio's net market value, or the portfolio has no positive
+          net market value. Returned by `POST /instruction-batches/divest`.
+        - `QUOTE_NOT_FOUND` (404): no quote exists for the ISIN given to
+          `GET /quote`.
       enum:
         - DUPLICATE_INSTRUCTION
         - INVESTMENT_PLAN_NOT_FOUND
@@ -1240,3 +1478,5 @@ components:
         - INVALID_REQUEST
         - INSTRUCTION_NOT_FOUND
         - INSTRUCTION_BATCH_NOT_FOUND
+        - NET_MARKET_VALUE_EXCEEDED
+        - QUOTE_NOT_FOUND
