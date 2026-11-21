@@ -121,6 +121,40 @@
       "response": []
     },
     {
+      "name": "portfolio-overview",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer 11"
+          }
+        ],
+        "url": {
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/portfolios/222222222/overview",
+          "protocol": "https",
+          "host": [
+            "vestapi-sandbox",
+            "emofid",
+            "com"
+          ],
+          "path": [
+            "bimehma",
+            "api",
+            "v1",
+            "portfolios",
+            "222222222",
+            "overview"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
       "name": "post:instruction-batches",
       "request": {
         "method": "POST",
