@@ -239,7 +239,7 @@
       "response": []
     },
     {
-      "name": "quote",
+      "name": "quotes",
       "request": {
         "method": "GET",
         "header": [
@@ -249,7 +249,7 @@
           }
         ],
         "url": {
-          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/quote?isin=IRTKMOFD0001",
+          "raw": "https://vestapi-sandbox.emofid.com/bimehma/api/v1/quotes?isin=IRTKMOFD0001",
           "protocol": "https",
           "host": [
             "vestapi-sandbox",
@@ -260,7 +260,7 @@
             "bimehma",
             "api",
             "v1",
-            "quote"
+            "quotes"
           ],
           "query": [
             {
@@ -269,7 +269,7 @@
             }
           ]
         },
-        "description": "Latest market quote of one asset. isin: 12 or 13 upper-case letters and digits. See GET /quote in openapi.yaml."
+        "description": "Latest market quote of one asset. isin: 12 or 13 upper-case letters and digits. See GET /quotes in openapi.yaml."
       },
       "response": []
     },
