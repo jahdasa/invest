@@ -683,9 +683,9 @@ paths:
         Returns, in one call, the portfolio's details as of the latest closed
         business day (`eod`, the same body as
         `GET /portfolios/{portfolioId}/details` without `dayKey`) and its
-        current cash and holdings (`latestState`). There is no `dayKey`: the
-        state is always the current one, so the end-of-day figures beside it
-        are always those of the latest closed business day. All monetary
+        current cash balance and debt (`latestCash`). There is no `dayKey`:
+        the cash is always the current one, so the end-of-day figures beside
+        it are always those of the latest closed business day. All monetary
         values are in Rial. An invalid portfolioId returns HTTP 400 with
         INVALID_REQUEST.
 
@@ -726,15 +726,9 @@ paths:
                       quantity: 800
                       lastMarketPrice: 25000
                   timestamp: '2026-09-27T10:15:00Z'
-                latestState:
-                  portfolioId: 112910912784151
+                latestCash:
                   cashBalance: 3000000
-                  positions:
-                    - isin: IRTKMOFD0001
-                      quantity: 1650
-
-                    - isin: IRT3TVAF0001
-                      quantity: 800
+                  debt: 0
 
         '400':
           $ref: '#/components/responses/InvalidRequest'
@@ -1319,51 +1313,30 @@ components:
           allOf:
             - $ref: '#/components/schemas/PortfolioDetailsResponse'
 
-        latestState:
+        latestCash:
           description: >
-            The portfolio's cash and holdings as they stand now.
+            The portfolio's cash balance and debt as they stand now.
           allOf:
-            - $ref: '#/components/schemas/PortfolioStateResponse'
+            - $ref: '#/components/schemas/PortfolioLatestCashDto'
 
 
-    PortfolioStateResponse:
+    PortfolioLatestCashDto:
       type: object
       properties:
-
-        portfolioId:
-          type: integer
-          format: int64
 
         cashBalance:
           type: integer
           format: int64
-          nullable: true
           description: >
-            Current cash balance of the portfolio, in Rial. Null when the
-            portfolio has no cash record yet.
+            Current cash balance of the portfolio, in Rial. Zero when the
+            portfolio has had no cash yet.
 
-        positions:
-          type: array
-          description: >
-            Current holdings. Symbols with zero quantity are left out.
-          items:
-            $ref: '#/components/schemas/PortfolioStatePositionDto'
-
-
-    PortfolioStatePositionDto:
-      type: object
-      properties:
-
-        isin:
-          type: string
-          description: ISIN code of the trading symbol.
-          example: IRTKMOFD0001
-
-        quantity:
+        debt:
           type: integer
           format: int64
           description: >
-            Number of units of the symbol currently held.
+            Current debt of the portfolio, in Rial. Zero when the portfolio
+            has had no cash yet.
 
 
     PortfolioNetMarketValueResponse:
